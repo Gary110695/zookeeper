@@ -108,20 +108,30 @@ public class QuorumPeerMain {
     protected void initializeAndRun(String[] args)
         throws ConfigException, IOException, AdminServerException
     {
+        // 创建了一个用于解析配置文件的类
         QuorumPeerConfig config = new QuorumPeerConfig();
+        // 如果发现你的命令行里仅仅给他传递了一个参数的话
         if (args.length == 1) {
+            // 此时就认为你传递的就是配置文件，zoo.cfg
+            // 就用QuorumPeerConfig类去解析zoo.cfg配置文件
             config.parse(args[0]);
         }
 
-        // Start and schedule the the purge task
+        // Start and schedule the purge task
+        // 启动了后台线程，定期清理zk的日志文件和快照文件
         DatadirCleanupManager purgeMgr = new DatadirCleanupManager(config
                 .getDataDir(), config.getDataLogDir(), config
                 .getSnapRetainCount(), config.getPurgeInterval());
         purgeMgr.start();
 
+        // 如果命令行传递进来了一个zoo.cfg
+        // 另外zoo.cfg中配置了servers，就说明配置了一个zk集群
         if (args.length == 1 && config.isDistributed()) {
+            // 按照集群的模式来启动当前的这个zk节点
             runFromConfig(config);
-        } else {
+        }
+        // 以单机模式启动zk
+        else {
             LOG.warn("Either no config or no quorum defined in config, running "
                     + " in standalone mode");
             // there is only server in the quorum -- run as standalone
@@ -157,6 +167,8 @@ public class QuorumPeerMain {
                       true);
           }
 
+          // 一个zk节点的启动，最核心的就是QuorumPeer
+          // QuorumPeer代表了一个zk节点
           quorumPeer = getQuorumPeer();
           quorumPeer.setTxnFactory(new FileTxnSnapLog(
                       config.getDataLogDir(),
@@ -203,6 +215,7 @@ public class QuorumPeerMain {
           quorumPeer.initialize();
           
           quorumPeer.start();
+          // 只要zk节点还在运行中，main线程就不会退出
           quorumPeer.join();
       } catch (InterruptedException e) {
           // warn, but generally this is ok
