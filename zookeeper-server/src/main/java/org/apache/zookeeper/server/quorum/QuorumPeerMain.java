@@ -112,13 +112,18 @@ public class QuorumPeerMain {
         QuorumPeerConfig config = new QuorumPeerConfig();
         // 如果发现你的命令行里仅仅给他传递了一个参数的话
         if (args.length == 1) {
-            // 此时就认为你传递的就是配置文件，zoo.cfg
+            // 此时就认为你传递的就是配置文件：zoo.cfg
             // 就用QuorumPeerConfig类去解析zoo.cfg配置文件
             config.parse(args[0]);
         }
 
         // Start and schedule the purge task
         // 启动了后台线程，定期清理zk的日志文件和快照文件
+        // 随着你不断的更新数据，就会一直向日志文件中写入日志，proposal阶段
+        // 超过半数的follower写入了proposal日志，返回ack给leader后，此时可以执行commit，将更新写到内存中
+        // 每隔一段时间，会把内存中的数据写到快照文件中，对应的日志文件就不再被需要了，可以被清理掉了，只要有快照之后的日志就可以了
+        // zk故障重启或者正常重启，就可以把快照加载到内存中，然后回放快照之后的日志，就可以将重启前的数据恢复
+        // 每隔一段时间，就会进行快照，可以定期把旧的快照清理掉
         DatadirCleanupManager purgeMgr = new DatadirCleanupManager(config
                 .getDataDir(), config.getDataLogDir(), config
                 .getSnapRetainCount(), config.getPurgeInterval());
