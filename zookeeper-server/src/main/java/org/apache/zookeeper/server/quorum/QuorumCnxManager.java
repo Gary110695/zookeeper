@@ -428,6 +428,7 @@ public class QuorumCnxManager {
         }
 
         // If lost the challenge, then drop the new connection
+        // 如果要发送的节点的id比自己要大，则关闭连接
         if (sid > self.getId()) {
             LOG.info("Have smaller server identifier, so dropping the " +
                     "connection: (" + sid + ", " + self.getId() + ")");
@@ -509,7 +510,9 @@ public class QuorumCnxManager {
         }
     }
 
-    private void handleConnection(Socket sock, DataInputStream din)
+    private void
+
+    handleConnection(Socket sock, DataInputStream din)
             throws IOException {
         Long sid = null, protocolVersion = null;
         InetSocketAddress electionAddr = null;
@@ -599,13 +602,14 @@ public class QuorumCnxManager {
         /*
          * If sending message to myself, then simply enqueue it (loopback).
          */
+        // 如果是发送给自己的，则加入到 recvQueue 中
         if (this.mySid == sid) {
              b.position(0);
              addToRecvQueue(new Message(b.duplicate(), sid));
             /*
              * Otherwise send to the corresponding thread to send.
              */
-        } else {
+        } else {    // 否则是发送给其它节点的的
              /*
               * Start a new connection if doesn't have one already.
               */
@@ -704,6 +708,7 @@ public class QuorumCnxManager {
             Map<Long, QuorumPeer.QuorumServer> lastProposedView = lastSeenQV.getAllMembers();
             if (lastCommittedView.containsKey(sid)) {
                 knownId = true;
+                // 与其它节点建立连接
                 if (connectOne(sid, lastCommittedView.get(sid).electionAddr))
                     return;
             }
@@ -894,7 +899,7 @@ public class QuorumCnxManager {
                         LOG.info("Creating TLS-only quorum server socket");
                         ss = new UnifiedServerSocket(self.getX509Util(), false);
                     } else {
-                        ss = new ServerSocket();
+                        ss = new ServerSocket();    // 默认走该分支
                     }
 
                     ss.setReuseAddress(true);
@@ -906,6 +911,7 @@ public class QuorumCnxManager {
                         // Resolve hostname for this server in case the
                         // underlying ip address has changed.
                         self.recreateSocketAddresses(self.getId());
+                        // 对于节点1，addr 为 127.0.0.1:2223
                         addr = self.getElectionAddress();
                     }
                     LOG.info("My election bind port: " + addr.toString());
@@ -914,6 +920,7 @@ public class QuorumCnxManager {
                     while (!shutdown) {
                         try {
                             client = ss.accept();
+                            // 对连接进行一些配置
                             setSockOpts(client);
                             LOG.info("Received connection request "
                                      + formatInetAddr((InetSocketAddress)client.getRemoteSocketAddress()));
@@ -925,7 +932,7 @@ public class QuorumCnxManager {
                             if (quorumSaslAuthEnabled) {
                                 receiveConnectionAsync(client);
                             } else {
-                                receiveConnection(client);
+                                receiveConnection(client);  // 默认走该分支
                             }
                             numRetries = 0;
                         } catch (SocketTimeoutException e) {
@@ -1000,6 +1007,8 @@ public class QuorumCnxManager {
      * Thread to send messages. Instance waits on a queue, and send a message as
      * soon as there is one available. If connection breaks, then opens a new
      * one.
+     *
+     * SenderWorker负责不断从全局的queueSendMap中读取自己所负责的sid对应的消息的列表，然后将消息发送给对应的sid
      */
     class SendWorker extends ZooKeeperThread {
         Long sid;
@@ -1131,6 +1140,7 @@ public class QuorumCnxManager {
 
                         if(b != null){
                             lastMessageSent.put(sid, b);
+                            // 进行发送
                             send(b);
                         }
                     } catch (InterruptedException e) {

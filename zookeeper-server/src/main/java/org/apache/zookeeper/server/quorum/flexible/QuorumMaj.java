@@ -79,15 +79,16 @@ public class QuorumMaj implements QuorumVerifier {
     }
 
     public QuorumMaj(Properties props) throws ConfigException {
+        // 遍历配置文件的server.N，构造成一个QuorumServer对象，放到allMembers、votingMembers、observingMembers集合中
         for (Entry<Object, Object> entry : props.entrySet()) {
             String key = entry.getKey().toString();
             String value = entry.getValue().toString();
-
             if (key.startsWith("server.")) {
                 int dot = key.indexOf('.');
                 long sid = Long.parseLong(key.substring(dot + 1));
                 QuorumServer qs = new QuorumServer(sid, value);
                 allMembers.put(Long.valueOf(sid), qs);
+                // qs.type 默认就是 LearnerType.PARTICIPANT
                 if (qs.type == LearnerType.PARTICIPANT)
                     votingMembers.put(Long.valueOf(sid), qs);
                 else {
@@ -97,6 +98,7 @@ public class QuorumMaj implements QuorumVerifier {
                 version = Long.parseLong(value, 16);
             }
         }
+        // 过半数量
         half = votingMembers.size() / 2;
     }
 

@@ -75,9 +75,13 @@ public class QuorumPeerConfig {
     protected String configFileStr = null;
     protected int tickTime = ZooKeeperServer.DEFAULT_TICK_TIME;
     protected int maxClientCnxns = 60;
-    /** defaults to -1 if not set explicitly */
+    /**
+     * defaults to -1 if not set explicitly
+     */
     protected int minSessionTimeout = -1;
-    /** defaults to -1 if not set explicitly */
+    /**
+     * defaults to -1 if not set explicitly
+     */
     protected int maxSessionTimeout = -1;
     protected boolean localSessionsEnabled = false;
     protected boolean localSessionsUpgradingEnabled = false;
@@ -110,6 +114,7 @@ public class QuorumPeerConfig {
 
     /**
      * Minimum snapshot retain count.
+     *
      * @see org.apache.zookeeper.server.PurgeTxnLog#purge(File, File, int)
      */
     private final int MIN_SNAP_RETAIN_COUNT = 3;
@@ -127,6 +132,7 @@ public class QuorumPeerConfig {
 
     /**
      * Parse a ZooKeeper configuration file
+     *
      * @param path the patch of the configuration file
      * @throws ConfigException error processing configuration
      */
@@ -224,6 +230,7 @@ public class QuorumPeerConfig {
 
     /**
      * Parse config from a Properties.
+     *
      * @param zkProp Properties to parse from.
      * @throws IOException
      * @throws ConfigException
@@ -234,6 +241,7 @@ public class QuorumPeerConfig {
         String clientPortAddress = null;
         String secureClientPortAddress = null;
         VerifyingFileFactory vff = new VerifyingFileFactory.Builder(LOG).warnForRelativePath().build();
+        // 解析配置文件中的属性
         for (Entry<Object,Object> entry : zkProp.entrySet()) {
             String key = entry.getKey().toString().trim();
             String value = entry.getValue().toString().trim();
@@ -411,9 +419,8 @@ public class QuorumPeerConfig {
     /**
      * Configure SSL authentication only if it is not configured.
      *
-     * @throws ConfigException
-     *             If authentication scheme is configured but authentication
-     *             provider is not configured.
+     * @throws ConfigException If authentication scheme is configured but authentication
+     *                         provider is not configured.
      */
     private void configureSSLAuth() throws ConfigException {
         try (ClientX509Util clientX509Util = new ClientX509Util()) {
@@ -562,6 +569,7 @@ public class QuorumPeerConfig {
     /**
      * Parse dynamic configuration file and return
      * quorumVerifier for new configuration.
+     *
      * @param dynamicConfigProp Properties to parse from.
      * @throws IOException
      * @throws ConfigException
@@ -648,8 +656,7 @@ public class QuorumPeerConfig {
         QuorumServer qs = quorumVerifier.getAllMembers().get(serverId);
         if (clientPortAddress != null && qs != null && qs.clientAddr != null) {
             if ((!clientPortAddress.getAddress().isAnyLocalAddress() && !clientPortAddress.equals(qs.clientAddr)) || (clientPortAddress.getAddress().isAnyLocalAddress() && clientPortAddress.getPort() != qs.clientAddr.getPort()))
-                throw new ConfigException("client address for this server (id = " + serverId + ") in static config file is " + clientPortAddress + " is different from client " +
-                        "address found in dynamic file: " + qs.clientAddr);
+                throw new ConfigException("client address for this server (id = " + serverId + ") in static config file is " + clientPortAddress + " is different from client " + "address found in dynamic file: " + qs.clientAddr);
         }
         if (qs != null && qs.clientAddr != null) clientPortAddress = qs.clientAddr;
     }
