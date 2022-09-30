@@ -24,7 +24,11 @@ import java.io.IOException;
 
 /**
  * Interface that is implemented by generated classes.
- * 
+ *
+ * Record接口是Jute序列化的核心接口，每个需要被序列化的实例都需要实现这个接口，该接口定义了序列化和反序列的方法
+ *
+ * zookeeper采用一种名为jute的方式进行序列化，jute本质上使用的是JDK自带的序列化方式，那么相对现在流行的protobuf等
+ * 方式显得笨重了许多。但是总体看来，序列化并不是zookeeper的性能瓶颈，且为了兼容，所以zookeeper一直没有更换这种序列化方式
  */
 @InterfaceAudience.Public
 public interface Record {

@@ -25,6 +25,10 @@ import java.util.TreeMap;
 /**
  * Interface that alll the serializers have to implement.
  *
+ * 默认有三个实现类，我们主要常用的是BinaryOutputArchive，
+ * 而关于Csv相关实现类，主要是为了更方便数据的可视化展示；
+ * XML的相关实现类主要是为了将数据以xml格式保存还原
+ *
  */
 public interface OutputArchive {
     public void writeByte(byte b, String tag) throws IOException;

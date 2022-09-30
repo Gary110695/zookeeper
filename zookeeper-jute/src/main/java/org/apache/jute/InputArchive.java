@@ -23,6 +23,10 @@ import java.io.IOException;
 /**
  * Interface that all the Deserializers have to implement.
  *
+ * 默认有三个实现类，我们主要常用的是BinaryInputArchive，
+ * 而关于Csv相关实现类，主要是为了更方便数据的可视化展示；
+ * XML的相关实现类主要是为了将数据以xml格式保存还原
+ *
  */
 public interface InputArchive {
     public byte readByte(String tag) throws IOException;
