@@ -883,8 +883,6 @@ public class FastLeaderElection implements Election {
                 // 由WorkerReceiver线程接收其他Server发来的通知，并将接收到的信息解析封装成Notification，放入recvqueue队列
                 Notification n = recvqueue.poll(notTimeout, TimeUnit.MILLISECONDS);
 
-                if (n != null) System.out.println(n);
-
                 /*
                  * Sends more notifications if haven't received enough.
                  * Otherwise processes new notification.

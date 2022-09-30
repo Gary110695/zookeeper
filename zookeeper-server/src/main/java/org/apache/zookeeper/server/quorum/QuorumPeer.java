@@ -896,6 +896,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
 
     private void loadDataBase() {
         try {
+            // 加载快照日志信息和事务日志信息到内存中，该方法返回最新的那条事务操作的zxid
             zkDb.loadDataBase();
 
             // load the epochs
@@ -1248,6 +1249,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
                         // leader选举结束后，确定了本节点是什么角色，然后进入对应的 switch...case
                         break;
                     case OBSERVING:
+                        // leader在过半写机制中是不考虑observer的，另外observer也不会参与选举
                         try {
                             LOG.info("OBSERVING");
                             setObserver(makeObserver(logFactory));
