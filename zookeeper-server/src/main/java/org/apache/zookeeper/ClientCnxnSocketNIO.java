@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -39,8 +39,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class ClientCnxnSocketNIO extends ClientCnxnSocket {
-    private static final Logger LOG = LoggerFactory
-            .getLogger(ClientCnxnSocketNIO.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ClientCnxnSocketNIO.class);
 
     private final Selector selector = Selector.open();
 
@@ -59,36 +58,38 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
     boolean isConnected() {
         return sockKey != null;
     }
-    
+
     /**
      * @return true if a packet was received
      * @throws InterruptedException
      * @throws IOException
      */
-    void doIO(List<Packet> pendingQueue, ClientCnxn cnxn)
-      throws InterruptedException, IOException {
-        SocketChannel sock = (SocketChannel) sockKey.channel();
+    void doIO(List<Packet> pendingQueue, ClientCnxn cnxn) throws InterruptedException, IOException {
+        SocketChannel sock = (SocketChannel)sockKey.channel();
         if (sock == null) {
             throw new IOException("Socket is null!");
         }
+        // 可读，说明接收到服务端的相应数据
         if (sockKey.isReadable()) {
+            // 数据读入到incomingBuffer中
             int rc = sock.read(incomingBuffer);
             if (rc < 0) {
-                throw new EndOfStreamException(
-                        "Unable to read additional data from server sessionid 0x"
-                                + Long.toHexString(sessionId)
-                                + ", likely server has closed socket");
+                throw new EndOfStreamException("Unable to read additional data from server sessionid 0x" + Long.toHexString(sessionId) + ", likely server has closed socket");
             }
+            // incomingBuffer写满的时候，则进行数据处理
             if (!incomingBuffer.hasRemaining()) {
                 incomingBuffer.flip();
+                // 读取到len字段，获取响应的总长度
                 if (incomingBuffer == lenBuffer) {
                     recvCount.getAndIncrement();
+                    // 分配len长度的ByteBuffer
                     readLength();
-                } else if (!initialized) {
+                }
+                // 如果还未初始化，说明当前响应是创建连接的响应
+                else if (!initialized) {
                     readConnectResult();
                     enableRead();
-                    if (findSendablePacket(outgoingQueue,
-                            sendThread.tunnelAuthInProgress()) != null) {
+                    if (findSendablePacket(outgoingQueue, sendThread.tunnelAuthInProgress()) != null) {
                         // Since SASL authentication has completed (if client is configured to do so),
                         // outgoing packets waiting in the outgoingQueue can now be sent.
                         enableWrite();
@@ -97,7 +98,9 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                     incomingBuffer = lenBuffer;
                     updateLastHeard();
                     initialized = true;
-                } else {
+                }
+                else {
+                    // 读取len长度的数据到ByteBuffer中，最终交由SendThread解析
                     sendThread.readResponse(incomingBuffer);
                     lenBuffer.clear();
                     incomingBuffer = lenBuffer;
@@ -105,28 +108,33 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                 }
             }
         }
+        // 有数据可写，说明outgoingQueue被添加了数据
         if (sockKey.isWritable()) {
-            Packet p = findSendablePacket(outgoingQueue,
-                    sendThread.tunnelAuthInProgress());
+            Packet p = findSendablePacket(outgoingQueue, sendThread.tunnelAuthInProgress());
 
             if (p != null) {
                 updateLastSend();
                 // If we already started writing p, p.bb will already exist
+                // bb默认为null
                 if (p.bb == null) {
-                    if ((p.requestHeader != null) &&
-                            (p.requestHeader.getType() != OpCode.ping) &&
-                            (p.requestHeader.getType() != OpCode.auth)) {
+                    if ((p.requestHeader != null) && (p.requestHeader.getType() != OpCode.ping) && (p.requestHeader.getType() != OpCode.auth)) {
+                        // 设置xid
+                        // xid的作用是保证服务器的响应包顺序和客户的请求包的顺序一致，客户端在发送请求时会递增这个值并赋予请求包；
+                        // 每次收到响应包时都会检查请求队列头部的请求包的xid是否和响应包的xid一致，如果不一致的话那么就断开连接。
+                        // 当xid为负值时，比如-2、-4、-1时，他们分别表示当前包为ping响应包、认证响应包、通知包，这些包不需要匹配
+                        // 请求队列里请求包，换句话说那就是它们对应的请求包并没有加入请求队列中。
                         p.requestHeader.setXid(cnxn.getXid());
                     }
+                    // 创建需要发送到服务端的ByteBuffer
                     p.createBB();
                 }
+                // 最终在这里通过SocketChannel将ByteBuffer发送给服务端
                 sock.write(p.bb);
+                // 发送完成之后，将packet添加到pendingQueue，等待响应
                 if (!p.bb.hasRemaining()) {
                     sentCount.getAndIncrement();
                     outgoingQueue.removeFirstOccurrence(p);
-                    if (p.requestHeader != null
-                            && p.requestHeader.getType() != OpCode.ping
-                            && p.requestHeader.getType() != OpCode.auth) {
+                    if (p.requestHeader != null && p.requestHeader.getType() != OpCode.ping && p.requestHeader.getType() != OpCode.auth) {
                         synchronized (pendingQueue) {
                             pendingQueue.add(p);
                         }
@@ -158,8 +166,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
         }
     }
 
-    private Packet findSendablePacket(LinkedBlockingDeque<Packet> outgoingQueue,
-                                      boolean tunneledAuthInProgres) {
+    private Packet findSendablePacket(LinkedBlockingDeque<Packet> outgoingQueue, boolean tunneledAuthInProgres) {
         if (outgoingQueue.isEmpty()) {
             return null;
         }
@@ -192,7 +199,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
     @Override
     void cleanup() {
         if (sockKey != null) {
-            SocketChannel sock = (SocketChannel) sockKey.channel();
+            SocketChannel sock = (SocketChannel)sockKey.channel();
             sockKey.cancel();
             try {
                 sock.socket().shutdownInput();
@@ -205,8 +212,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                 sock.socket().shutdownOutput();
             } catch (IOException e) {
                 if (LOG.isDebugEnabled()) {
-                    LOG.debug("Ignoring exception during shutdown output",
-                            e);
+                    LOG.debug("Ignoring exception during shutdown output", e);
                 }
             }
             try {
@@ -233,7 +239,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
         }
         sockKey = null;
     }
- 
+
     @Override
     void close() {
         try {
@@ -248,9 +254,10 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
             LOG.warn("Ignoring exception during selector close", e);
         }
     }
-    
+
     /**
      * create a socket channel.
+     *
      * @return the created socket channel
      * @throws IOException
      */
@@ -265,25 +272,27 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
 
     /**
      * register with the selection and connect
-     * @param sock the {@link SocketChannel} 
+     *
+     * @param sock the {@link SocketChannel}
      * @param addr the address of remote host
      * @throws IOException
      */
-    void registerAndConnect(SocketChannel sock, InetSocketAddress addr) 
-    throws IOException {
+    void registerAndConnect(SocketChannel sock, InetSocketAddress addr) throws IOException {
         sockKey = sock.register(selector, SelectionKey.OP_CONNECT);
         boolean immediateConnect = sock.connect(addr);
         if (immediateConnect) {
+            // 连接成功后，就会调用 primeConnection 方法
             sendThread.primeConnection();
         }
     }
-    
+
     @Override
     void connect(InetSocketAddress addr) throws IOException {
+        // 创建 SocketChannel，并设置为非阻塞模式
         SocketChannel sock = createSock();
         try {
-           registerAndConnect(sock, addr);
-      } catch (IOException e) {
+            registerAndConnect(sock, addr);
+        } catch (IOException e) {
             LOG.error("Unable to open socket to " + addr);
             sock.close();
             throw e;
@@ -299,9 +308,9 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
 
     /**
      * Returns the address to which the socket is connected.
-     * 
+     *
      * @return ip address of the remote side of the connection or null if not
-     *         connected
+     * connected
      */
     @Override
     SocketAddress getRemoteSocketAddress() {
@@ -310,17 +319,17 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
 
     /**
      * Returns the local address to which the socket is bound.
-     * 
+     *
      * @return ip address of the remote side of the connection or null if not
-     *         connected
+     * connected
      */
     @Override
     SocketAddress getLocalSocketAddress() {
         return localSocketAddress;
     }
-    
+
     private void updateSocketAddresses() {
-        Socket socket = ((SocketChannel) sockKey.channel()).socket();
+        Socket socket = ((SocketChannel)sockKey.channel()).socket();
         localSocketAddress = socket.getLocalSocketAddress();
         remoteSocketAddress = socket.getRemoteSocketAddress();
     }
@@ -338,10 +347,9 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
     private synchronized void wakeupCnxn() {
         selector.wakeup();
     }
-    
+
     @Override
-    void doTransport(int waitTimeOut, List<Packet> pendingQueue, ClientCnxn cnxn)
-            throws IOException, InterruptedException {
+    void doTransport(int waitTimeOut, List<Packet> pendingQueue, ClientCnxn cnxn) throws IOException, InterruptedException {
         selector.select(waitTimeOut);
         Set<SelectionKey> selected;
         synchronized (this) {
@@ -352,7 +360,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
         // Why we just have to do this once, here
         updateNow();
         for (SelectionKey k : selected) {
-            SocketChannel sc = ((SocketChannel) k.channel());
+            SocketChannel sc = ((SocketChannel)k.channel());
             if ((k.readyOps() & SelectionKey.OP_CONNECT) != 0) {
                 if (sc.finishConnect()) {
                     updateLastSendAndHeard();
@@ -364,8 +372,8 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
             }
         }
         if (sendThread.getZkState().isConnected()) {
-            if (findSendablePacket(outgoingQueue,
-                    sendThread.tunnelAuthInProgress()) != null) {
+            // 发现outgoingQueue有可发送的数据，则注册OP_WRITE事件
+            if (findSendablePacket(outgoingQueue, sendThread.tunnelAuthInProgress()) != null) {
                 enableWrite();
             }
         }
@@ -379,8 +387,8 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
         // sockKey may be concurrently accessed by multiple
         // threads. We use tmp here to avoid a race condition
         SelectionKey tmp = sockKey;
-        if (tmp!=null) {
-           ((SocketChannel) tmp.channel()).socket().close();
+        if (tmp != null) {
+            ((SocketChannel)tmp.channel()).socket().close();
         }
     }
 
@@ -421,7 +429,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
 
     @Override
     void sendPacket(Packet p) throws IOException {
-        SocketChannel sock = (SocketChannel) sockKey.channel();
+        SocketChannel sock = (SocketChannel)sockKey.channel();
         if (sock == null) {
             throw new IOException("Socket is null!");
         }

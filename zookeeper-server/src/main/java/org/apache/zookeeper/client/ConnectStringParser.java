@@ -33,22 +33,31 @@ import static org.apache.zookeeper.common.StringUtils.split;
  * 
  * The chrootPath member should be replaced by a Path object in issue
  * ZOOKEEPER-849.
+ *
+ * 用于解析服务端ip信息
  * 
  * @see org.apache.zookeeper.ZooKeeper
  */
 public final class ConnectStringParser {
+
+    // 默认端口为 2181
     private static final int DEFAULT_PORT = 2181;
 
+    // 根目录，一般应用在使用时都会创建一个独特的根目录信息，比如dubbo的注册信息都以/dubbo为根目录
     private final String chrootPath;
 
+    // 解析出来的具体server信息集合
     private final ArrayList<InetSocketAddress> serverAddresses = new ArrayList<InetSocketAddress>();
 
     /**
-     * 
+     * 解析chrootPath和服务端地址，封装成InetSocketAddress
      * @throws IllegalArgumentException
      *             for an invalid chroot path.
      */
     public ConnectStringParser(String connectString) {
+
+        // 以 connectString = "192.168.0.1:2181,192.168.0.2:2181,192.168.0.3:2181/zktest" 为例
+
         // parse out chroot, if any
         int off = connectString.indexOf('/');
         if (off >= 0) {
@@ -58,8 +67,10 @@ public final class ConnectStringParser {
                 this.chrootPath = null;
             } else {
                 PathUtils.validatePath(chrootPath);
+                // 这里会使用zktest作为根目录
                 this.chrootPath = chrootPath;
             }
+            // 192.168.0.1:2181,192.168.0.2:2181,192.168.0.3:2181被解析成connectString
             connectString = connectString.substring(0, off);
         } else {
             this.chrootPath = null;
@@ -76,6 +87,7 @@ public final class ConnectStringParser {
                 }
                 host = host.substring(0, pidx);
             }
+            // 将 connectString 解析成 InetSocketAddress
             serverAddresses.add(InetSocketAddress.createUnresolved(host, port));
         }
     }

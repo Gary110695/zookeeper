@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -40,10 +40,10 @@ import org.slf4j.LoggerFactory;
 /**
  * A ClientCnxnSocket does the lower level communication with a socket
  * implementation.
- * 
+ *
  * This code has been moved out of ClientCnxn so that a Netty implementation can
  * be provided as an alternative to the NIO socket code.
- * 
+ *
  */
 abstract class ClientCnxnSocket {
     private static final Logger LOG = LoggerFactory.getLogger(ClientCnxnSocket.class);
@@ -76,8 +76,7 @@ abstract class ClientCnxnSocket {
      */
     protected long sessionId;
 
-    void introduce(ClientCnxn.SendThread sendThread, long sessionId,
-                   LinkedBlockingDeque<Packet> outgoingQueue) {
+    void introduce(ClientCnxn.SendThread sendThread, long sessionId, LinkedBlockingDeque<Packet> outgoingQueue) {
         this.sendThread = sendThread;
         this.sessionId = sessionId;
         this.outgoingQueue = outgoingQueue;
@@ -88,11 +87,11 @@ abstract class ClientCnxnSocket {
     }
 
     int getIdleRecv() {
-        return (int) (now - lastHeard);
+        return (int)(now - lastHeard);
     }
 
     int getIdleSend() {
-        return (int) (now - lastSend);
+        return (int)(now - lastSend);
     }
 
     long getSentCount() {
@@ -121,6 +120,7 @@ abstract class ClientCnxnSocket {
         if (len < 0 || len >= packetLen) {
             throw new IOException("Packet len" + len + " is out of range!");
         }
+        // 当读取到len后，会根据len分配新的ByteBuffer用来读取响应数据
         incomingBuffer = ByteBuffer.allocate(len);
     }
 
@@ -131,8 +131,7 @@ abstract class ClientCnxnSocket {
                 buf.append(Integer.toHexString(b) + ",");
             }
             buf.append("]");
-            LOG.trace("readConnectResult " + incomingBuffer.remaining() + " "
-                    + buf.toString());
+            LOG.trace("readConnectResult " + incomingBuffer.remaining() + " " + buf.toString());
         }
         ByteBufferInputStream bbis = new ByteBufferInputStream(incomingBuffer);
         BinaryInputArchive bbia = BinaryInputArchive.getArchive(bbis);
@@ -149,9 +148,9 @@ abstract class ClientCnxnSocket {
             LOG.warn("Connected to an old server; r-o mode will be unavailable");
         }
 
+        // 服务端分配的唯一的一个会话ID，用于标识会话
         this.sessionId = conRsp.getSessionId();
-        sendThread.onConnected(conRsp.getTimeOut(), this.sessionId,
-                conRsp.getPasswd(), isRO);
+        sendThread.onConnected(conRsp.getTimeOut(), this.sessionId, conRsp.getPasswd(), isRO);
     }
 
     abstract boolean isConnected();
@@ -208,9 +207,7 @@ abstract class ClientCnxnSocket {
      * @throws IOException
      * @throws InterruptedException
      */
-    abstract void doTransport(int waitTimeOut, List<Packet> pendingQueue,
-            ClientCnxn cnxn)
-            throws IOException, InterruptedException;
+    abstract void doTransport(int waitTimeOut, List<Packet> pendingQueue, ClientCnxn cnxn) throws IOException, InterruptedException;
 
     /**
      * Close the socket.
@@ -232,14 +229,10 @@ abstract class ClientCnxnSocket {
 
     protected void initProperties() throws IOException {
         try {
-            packetLen = clientConfig.getInt(ZKConfig.JUTE_MAXBUFFER,
-                    ZKClientConfig.CLIENT_MAX_PACKET_LENGTH_DEFAULT);
-            LOG.info("{} value is {} Bytes", ZKConfig.JUTE_MAXBUFFER,
-                    packetLen);
+            packetLen = clientConfig.getInt(ZKConfig.JUTE_MAXBUFFER, ZKClientConfig.CLIENT_MAX_PACKET_LENGTH_DEFAULT);
+            LOG.info("{} value is {} Bytes", ZKConfig.JUTE_MAXBUFFER, packetLen);
         } catch (NumberFormatException e) {
-            String msg = MessageFormat.format(
-                    "Configured value {0} for property {1} can not be parsed to int",
-                    clientConfig.getProperty(ZKConfig.JUTE_MAXBUFFER),
+            String msg = MessageFormat.format("Configured value {0} for property {1} can not be parsed to int", clientConfig.getProperty(ZKConfig.JUTE_MAXBUFFER),
                     ZKConfig.JUTE_MAXBUFFER);
             LOG.error(msg);
             throw new IOException(msg);
