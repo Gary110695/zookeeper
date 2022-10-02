@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -34,34 +34,34 @@ import org.apache.zookeeper.server.persistence.FileTxnSnapLog;
 import org.apache.zookeeper.txn.TxnHeader;
 
 /**
- * Just like the standard ZooKeeperServer. We just replace the request
- * processors: FollowerRequestProcessor -> CommitProcessor ->
- * FinalRequestProcessor
+ * Just like the standard ZooKeeperServer. We just replace the request processors:
+ * FollowerRequestProcessor -> CommitProcessor -> FinalRequestProcessor
  *
  * A SyncRequestProcessor is also spawned off to log proposals from the leader.
+ *
+ * Follower是Zookeeper集群的跟随者，其主要工作如下
+ * (1) 处理客户端非事务性请求（读取数据），转发事务请求给Leader服务器
+ * (2) 参与事务请求Proposal的投票
+ * (3) 参与Leader选举投票
  */
 public class FollowerZooKeeperServer extends LearnerZooKeeperServer {
-    private static final Logger LOG =
-        LoggerFactory.getLogger(FollowerZooKeeperServer.class);
+    private static final Logger LOG = LoggerFactory.getLogger(FollowerZooKeeperServer.class);
 
     /*
      * Pending sync requests
-     */
-    ConcurrentLinkedQueue<Request> pendingSyncs;
+     */ ConcurrentLinkedQueue<Request> pendingSyncs;
 
     /**
      * @param port
      * @param dataDir
      * @throws IOException
      */
-    FollowerZooKeeperServer(FileTxnSnapLog logFactory,QuorumPeer self,
-            ZKDatabase zkDb) throws IOException {
-        super(logFactory, self.tickTime, self.minSessionTimeout,
-                self.maxSessionTimeout, zkDb, self);
+    FollowerZooKeeperServer(FileTxnSnapLog logFactory, QuorumPeer self, ZKDatabase zkDb) throws IOException {
+        super(logFactory, self.tickTime, self.minSessionTimeout, self.maxSessionTimeout, zkDb, self);
         this.pendingSyncs = new ConcurrentLinkedQueue<Request>();
     }
 
-    public Follower getFollower(){
+    public Follower getFollower() {
         return self.follower;
     }
 
@@ -72,13 +72,11 @@ public class FollowerZooKeeperServer extends LearnerZooKeeperServer {
     @Override
     protected void setupRequestProcessors() {
         RequestProcessor finalProcessor = new FinalRequestProcessor(this);
-        commitProcessor = new CommitProcessor(finalProcessor,
-                Long.toString(getServerId()), true, getZooKeeperServerListener());
+        commitProcessor = new CommitProcessor(finalProcessor, Long.toString(getServerId()), true, getZooKeeperServerListener());
         commitProcessor.start();
         firstProcessor = new FollowerRequestProcessor(this, commitProcessor);
-        ((FollowerRequestProcessor) firstProcessor).start();
-        syncProcessor = new SyncRequestProcessor(this,
-                new SendAckRequestProcessor((Learner)getFollower()));
+        ((FollowerRequestProcessor)firstProcessor).start();
+        syncProcessor = new SyncRequestProcessor(this, new SendAckRequestProcessor((Learner)getFollower()));
         syncProcessor.start();
     }
 
@@ -89,6 +87,7 @@ public class FollowerZooKeeperServer extends LearnerZooKeeperServer {
         if ((request.zxid & 0xffffffffL) != 0) {
             pendingTxns.add(request);
         }
+        // 交由syncProcessor处理
         syncProcessor.processRequest(request);
     }
 
@@ -100,29 +99,27 @@ public class FollowerZooKeeperServer extends LearnerZooKeeperServer {
      */
     public void commit(long zxid) {
         if (pendingTxns.size() == 0) {
-            LOG.warn("Committing " + Long.toHexString(zxid)
-                    + " without seeing txn");
+            LOG.warn("Committing " + Long.toHexString(zxid) + " without seeing txn");
             return;
         }
         long firstElementZxid = pendingTxns.element().zxid;
         if (firstElementZxid != zxid) {
-            LOG.error("Committing zxid 0x" + Long.toHexString(zxid)
-                    + " but next pending txn 0x"
-                    + Long.toHexString(firstElementZxid));
+            LOG.error("Committing zxid 0x" + Long.toHexString(zxid) + " but next pending txn 0x" + Long.toHexString(firstElementZxid));
             System.exit(12);
         }
         Request request = pendingTxns.remove();
+        // 交由commitProcessor，将请求放入committedRequests中，此时commitProcessor会进入processCommitted的逻辑，将请求交付给下一个请求处理器FinalRequestProcessor处理
         commitProcessor.commit(request);
     }
 
-    synchronized public void sync(){
-        if(pendingSyncs.size() ==0){
+    synchronized public void sync() {
+        if (pendingSyncs.size() == 0) {
             LOG.warn("Not expecting a sync.");
             return;
         }
 
         Request r = pendingSyncs.remove();
-		commitProcessor.commit(r);
+        commitProcessor.commit(r);
     }
 
     @Override

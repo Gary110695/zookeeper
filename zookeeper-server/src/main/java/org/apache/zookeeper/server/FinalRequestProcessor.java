@@ -109,7 +109,10 @@ public class FinalRequestProcessor implements RequestProcessor {
         ProcessTxnResult rc = null;
         synchronized (zks.outstandingChanges) {
             // Need to process local session requests
-            // 事务信息处理
+            // 事务处理
+            // 之前的请求处理逻辑，只是将该事务请求记录到事务日志中，而内存数据库中尚未变更。因此，该环节就是将事务变更应用到内存数据库中
+            // 需要注意，对于会话创建这类事务请求，ZK做了特殊处理：因为在ZK内存中，会话的管理是由SessionTracker负责，在之前，ZK已经将会话信息
+            // 注册到了SessionTracker中，因此此处无需对内存数据库做任何处理，只需要再次向SessionTracker进行会话注册即可
             rc = zks.processTxn(request);
 
             // request.hdr is set for write requests, which are the only ones
@@ -118,6 +121,7 @@ public class FinalRequestProcessor implements RequestProcessor {
                 TxnHeader hdr = request.getHdr();
                 Record txn = request.getTxn();
                 long zxid = hdr.getZxid();
+                // 检查outstandingChanges队列中请求的有效性，若发现这些请求已经落后于当前正在处理的请求，那么直接从outstandingChanges队列中移除
                 while (!zks.outstandingChanges.isEmpty() && zks.outstandingChanges.peek().zxid <= zxid) {
                     ChangeRecord cr = zks.outstandingChanges.remove();
                     if (cr.zxid < zxid) {
@@ -131,6 +135,8 @@ public class FinalRequestProcessor implements RequestProcessor {
 
             // do not add non quorum packets to the queue.
             if (request.isQuorum()) {
+                // 一旦完成事务请求的内存数据库应用，就可以将该请求放入 committedLog 中了
+                // committedLog 用来保存最近被提交的事务请求，以便集群间进行数据的快速同步
                 zks.getZKDatabase().addCommittedProposal(request);
             }
         }
@@ -182,6 +188,7 @@ public class FinalRequestProcessor implements RequestProcessor {
             if (LOG.isDebugEnabled()) {
                 LOG.debug("{}", request);
             }
+            // 接下来是根据请求的类型创建对应的响应类型，序列化响应，通过网络IO发送给客户端
             switch (request.type) {
                 case OpCode.ping: {
                     zks.serverStats().updateLatency(request.createTime);
@@ -311,11 +318,12 @@ public class FinalRequestProcessor implements RequestProcessor {
                     break;
                 }
                 case OpCode.getData: {
+                    // 非事务请求
                     lastOp = "GETD";
                     GetDataRequest getDataRequest = new GetDataRequest();
                     // 反序列化请求到GetDataRequest
                     ByteBufferInputStream.byteBuffer2Record(request.request, getDataRequest);
-                    // 从内存中获取对应DataNode的节点信息
+                    // 处理getData请求的方式就是直接从当前内存数据库ZKDatabase中获取到对应path的DataNode信息
                     DataNode n = zks.getZKDatabase().getNode(getDataRequest.getPath());
                     if (n == null) {
                         throw new KeeperException.NoNodeException();

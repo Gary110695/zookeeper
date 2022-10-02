@@ -124,6 +124,7 @@ public class Follower extends Learner {
             case Leader.PING:
                 ping(qp);
                 break;
+            // 接收到leader发送过来的proposal
             case Leader.PROPOSAL:
                 TxnHeader hdr = new TxnHeader();
                 Record txn = SerializeUtils.deserializeTxn(qp.getData(), hdr);
@@ -138,9 +139,12 @@ public class Follower extends Learner {
                     self.setLastSeenQuorumVerifier(qv, true);
                 }
 
+                // 进行事务日志处理
                 fzk.logRequest(hdr, txn);
                 break;
+            // 接收到leader发送过来的commit
             case Leader.COMMIT:
+                // 当leader收集到足够的ack后，向各follower发送commit
                 fzk.commit(qp.getZxid());
                 break;
 

@@ -69,7 +69,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
         if (sock == null) {
             throw new IOException("Socket is null!");
         }
-        // 可读，说明接收到服务端的相应数据
+        // 可读，说明接收到服务端的响应数据
         if (sockKey.isReadable()) {
             // 数据读入到incomingBuffer中
             int rc = sock.read(incomingBuffer);

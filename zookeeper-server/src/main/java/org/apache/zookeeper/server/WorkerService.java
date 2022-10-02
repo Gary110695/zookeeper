@@ -111,6 +111,7 @@ public class WorkerService {
             return;
         }
 
+        // 1.将请求封装成ScheduledWorkRequest
         ScheduledWorkRequest scheduledWorkRequest = new ScheduledWorkRequest(workRequest);
 
         // If we have a worker thread pool, use that; otherwise, do the work
@@ -119,8 +120,10 @@ public class WorkerService {
         if (size > 0) {
             try {
                 // make sure to map negative ids as well to [0, size-1]
+                // 2.这里的id是sessionId，因此来自同一个session的请求会分配给同一个工作线程来处理，同一个会话的请求会在相同的线程上顺序执行
                 int workerNum = ((int)(id % size) + size) % size;
                 ExecutorService worker = workers.get(workerNum);
+                // 3.工作线程执行请求
                 worker.execute(scheduledWorkRequest);
             } catch (RejectedExecutionException e) {
                 LOG.warn("ExecutorService rejected execution", e);

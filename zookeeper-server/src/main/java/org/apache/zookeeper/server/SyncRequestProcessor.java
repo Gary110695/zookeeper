@@ -216,6 +216,8 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
         while (!toFlush.isEmpty()) {
             Request i = toFlush.remove();
             if (nextProcessor != null) {
+                // 对于leader，它的下一个处理器是AckRequestProcessor
+                // 对于follower，它的下一个处理器是SendAckRequestProcessor
                 nextProcessor.processRequest(i);
             }
         }

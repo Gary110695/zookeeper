@@ -57,7 +57,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * This class has the control logic for the Leader.
- *
+ * <p>
  * Leader服务器是Zookeeper集群工作的核心，其主要工作如下
  * (1) 事务请求的唯一调度和处理者，保证集群事务处理的顺序性。
  * (2) 集群内部各服务器的调度者
@@ -176,8 +176,7 @@ public class Leader {
     /**
      * Adds peer to the leader.
      *
-     * @param learner
-     *                instance of learner handle
+     * @param learner instance of learner handle
      */
     void addLearnerHandler(LearnerHandler learner) {
         synchronized (learners) {
@@ -370,6 +369,9 @@ public class Leader {
 
     final ConcurrentMap<Long, Proposal> outstandingProposals = new ConcurrentHashMap<Long, Proposal>();
 
+    // 当一个事务请求收到过半follower的proposal ack的时候，会放入到committedRequests队列中，在这之前，会先放入到toBeApplied中
+    // CommitProcessor会把该请求从committedRequests队列中取出，交给ToBeAppliedRequestProcessor处理
+    // 而ToBeAppliedRequestProcessor的处理方式很简单，直接交给下一个处理器FinalRequestProcessor处理，并把该请求从toBeApplied中移除
     private final ConcurrentLinkedQueue<Proposal> toBeApplied = new ConcurrentLinkedQueue<Proposal>();
 
     // VisibleForTesting
@@ -702,13 +704,14 @@ public class Leader {
         isShutdown = true;
     }
 
-    /** In a reconfig operation, this method attempts to find the best leader for next configuration.
-     *  If the current leader is a voter in the next configuartion, then it remains the leader.
-     *  Otherwise, choose one of the new voters that acked the reconfiguartion, such that it is as   
+    /**
+     * In a reconfig operation, this method attempts to find the best leader for next configuration.
+     * If the current leader is a voter in the next configuartion, then it remains the leader.
+     * Otherwise, choose one of the new voters that acked the reconfiguartion, such that it is as
      * up-to-date as possible, i.e., acked as many outstanding proposals as possible.
      *
      * @param reconfigProposal
-     * @param zxid of the reconfigProposal
+     * @param zxid             of the reconfigProposal
      * @return server if of the designated leader
      */
 
@@ -767,6 +770,7 @@ public class Leader {
         // in order to be committed, a proposal must be accepted by a quorum.
         //
         // getting a quorum from all necessary configurations.
+        // 是否已经有过半的follower返回ac
         if (!p.hasAllQuorums()) {
             return false;
         }
@@ -779,6 +783,7 @@ public class Leader {
 
         outstandingProposals.remove(zxid);
 
+        // 本次proposal已经被多数follower通过，可以进行commit，先添加到toBeApplied中
         if (p.request != null) {
             toBeApplied.add(p);
         }
@@ -808,11 +813,13 @@ public class Leader {
             // receive the commit message.
             commitAndActivate(zxid, designatedLeader);
             informAndActivate(p, designatedLeader);
-            //turnOffFollowers();
+            // turnOffFollowers();
         } else {
+            // leader向所有的follower发送commit消息，以提交本次proposal
             commit(zxid);
             inform(p);
         }
+        // 将本次请求添加到CommitProcessor.committedRequests集合中
         zk.commitProcessor.commit(p.request);
         if (pendingSyncs.containsKey(zxid)) {
             for (LearnerSyncRequest r : pendingSyncs.remove(zxid)) {
@@ -827,8 +834,8 @@ public class Leader {
      * Keep a count of acks that are received by the leader for a particular
      * proposal
      *
-     * @param zxid, the zxid of the proposal sent out
-     * @param sid, the id of the server that sent the ack
+     * @param zxid,        the zxid of the proposal sent out
+     * @param sid,         the id of the server that sent the ack
      * @param followerAddr
      */
     synchronized public void processAck(long sid, long zxid, SocketAddress followerAddr) {
@@ -872,7 +879,9 @@ public class Leader {
             return;
         }
 
-        p.addAck(sid);        
+        // 当前响应ack的follower的sid添加到Proposal的ackSet中
+        p.addAck(sid);
+
         /*if (LOG.isDebugEnabled()) {
             LOG.debug("Count for zxid: 0x{} is {}",
                     Long.toHexString(zxid), p.ackSet.size());
@@ -910,8 +919,7 @@ public class Leader {
          * FinalRequestProcessor.processRequest MUST process the request
          * synchronously!
          *
-         * @param next
-         *                a reference to the FinalRequestProcessor
+         * @param next a reference to the FinalRequestProcessor
          */
         ToBeAppliedRequestProcessor(RequestProcessor next, Leader leader) {
             if (!(next instanceof FinalRequestProcessor)) {
@@ -927,6 +935,7 @@ public class Leader {
          * @see org.apache.zookeeper.server.RequestProcessor#processRequest(org.apache.zookeeper.server.Request)
          */
         public void processRequest(Request request) throws RequestProcessorException {
+
             next.processRequest(request);
 
             // The only requests that should be on toBeApplied are write
@@ -961,12 +970,12 @@ public class Leader {
     /**
      * send a packet to all the followers ready to follow
      *
-     * @param qp
-     *                the packet to be sent
+     * @param qp the packet to be sent
      */
     void sendPacket(QuorumPacket qp) {
         synchronized (forwardingFollowers) {
             for (LearnerHandler f : forwardingFollowers) {
+                // 放入queuedPackets中，最终交由每个LearnerHandler来发送
                 f.queuePacket(qp);
             }
         }
@@ -1054,14 +1063,15 @@ public class Leader {
 
     /**
      * create a proposal and send it out to all the members
+     * <p>
+     * Leader针对事务请求发起propose
      *
      * @param request
      * @return the proposal that is queued to send to all the members
      */
     public Proposal propose(Request request) throws XidRolloverException {
         /**
-         * Address the rollover issue. All lower 32bits set indicate a new leader
-         * election. Force a re-election instead. See ZOOKEEPER-1277
+         * Address the rollover issue. All lower 32bits set indicate a new leader election. Force a re-election instead. See ZOOKEEPER-1277
          */
         if ((request.zxid & 0xffffffffL) == 0xffffffffL) {
             String msg = "zxid lower 32 bits have rolled over, forcing re-election, and therefore new epoch start";
@@ -1071,6 +1081,7 @@ public class Leader {
 
         byte[] data = SerializeUtils.serializeRequest(request);
         proposalStats.setLastBufferSize(data.length);
+        // 封装一个PROPOSAL类型的packet
         QuorumPacket pp = new QuorumPacket(Leader.PROPOSAL, request.zxid, data, null);
 
         Proposal p = new Proposal();
@@ -1094,6 +1105,7 @@ public class Leader {
 
             lastProposed = p.packet.getZxid();
             outstandingProposals.put(lastProposed, p);
+            // 将proposal包发送给followers
             sendPacket(pp);
         }
         return p;
@@ -1250,7 +1262,7 @@ public class Leader {
     }
 
     /**
-     * Return a list of sid in set as string  
+     * Return a list of sid in set as string
      */
     private String getSidSetString(Set<Long> sidSet) {
         StringBuilder sids = new StringBuilder();
@@ -1350,6 +1362,7 @@ public class Leader {
 
     /**
      * Get string representation of a given packet type
+     *
      * @param packetType
      * @return string representing the packet type
      */

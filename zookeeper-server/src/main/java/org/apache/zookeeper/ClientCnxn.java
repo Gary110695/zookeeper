@@ -97,7 +97,6 @@ import org.slf4j.MDC;
  * This class manages the socket i/o for the client. ClientCnxn maintains a list
  * of available servers to connect to and "transparently" switches servers it is
  * connected to as needed.
- *
  */
 @SuppressFBWarnings({"EI_EXPOSE_REP", "EI_EXPOSE_REP2"})
 public class ClientCnxn {
@@ -241,7 +240,7 @@ public class ClientCnxn {
 
     /**
      * This class allows us to pass the headers and the relevant records around.
-     *
+     * <p>
      * 封装了客户端一次请求或服务端一次响应的完整数据
      */
     static class Packet {
@@ -255,9 +254,13 @@ public class ClientCnxn {
 
         ByteBuffer bb;
 
-        /** Client's view of the path (may differ due to chroot) **/
+        /**
+         * Client's view of the path (may differ due to chroot)
+         **/
         String clientPath;
-        /** Servers's view of the path (may differ due to chroot) **/
+        /**
+         * Servers's view of the path (may differ due to chroot)
+         **/
         String serverPath;
 
         boolean finished;
@@ -272,7 +275,9 @@ public class ClientCnxn {
 
         WatchDeregistration watchDeregistration;
 
-        /** Convenience ctor */
+        /**
+         * Convenience ctor
+         */
         Packet(RequestHeader requestHeader, ReplyHeader replyHeader, Record request, Record response, WatchRegistration watchRegistration) {
             this(requestHeader, replyHeader, request, response, watchRegistration, false);
         }
@@ -336,19 +341,14 @@ public class ClientCnxn {
      * established until needed. The start() instance method must be called
      * subsequent to construction.
      *
-     * @param chrootPath - the chroot of this client. Should be removed from this Class in ZOOKEEPER-838
-     * @param hostProvider
-     *                the list of ZooKeeper servers to connect to
-     * @param sessionTimeout
-     *                the timeout for connections.
-     * @param zooKeeper
-     *                the zookeeper object that this connection is related to.
-     * @param watcher watcher for this connection
-     * @param clientCnxnSocket
-     *                the socket implementation used (e.g. NIO/Netty)
-     * @param canBeReadOnly
-     *                whether the connection is allowed to go to read-only
-     *                mode in case of partitioning
+     * @param chrootPath       - the chroot of this client. Should be removed from this Class in ZOOKEEPER-838
+     * @param hostProvider     the list of ZooKeeper servers to connect to
+     * @param sessionTimeout   the timeout for connections.
+     * @param zooKeeper        the zookeeper object that this connection is related to.
+     * @param watcher          watcher for this connection
+     * @param clientCnxnSocket the socket implementation used (e.g. NIO/Netty)
+     * @param canBeReadOnly    whether the connection is allowed to go to read-only
+     *                         mode in case of partitioning
      * @throws IOException
      */
     public ClientCnxn(String chrootPath, HostProvider hostProvider, int sessionTimeout, ZooKeeper zooKeeper, ClientWatchManager watcher, ClientCnxnSocket clientCnxnSocket,
@@ -361,21 +361,16 @@ public class ClientCnxn {
      * established until needed. The start() instance method must be called
      * subsequent to construction.
      *
-     * @param chrootPath - the chroot of this client. Should be removed from this Class in ZOOKEEPER-838
-     * @param hostProvider
-     *                the list of ZooKeeper servers to connect to
-     * @param sessionTimeout
-     *                the timeout for connections.
-     * @param zooKeeper
-     *                the zookeeper object that this connection is related to.
-     * @param watcher watcher for this connection
-     * @param clientCnxnSocket
-     *                the socket implementation used (e.g. NIO/Netty)
-     * @param sessionId session id if re-establishing session
-     * @param sessionPasswd session passwd if re-establishing session
-     * @param canBeReadOnly
-     *                whether the connection is allowed to go to read-only
-     *                mode in case of partitioning
+     * @param chrootPath       - the chroot of this client. Should be removed from this Class in ZOOKEEPER-838
+     * @param hostProvider     the list of ZooKeeper servers to connect to
+     * @param sessionTimeout   the timeout for connections.
+     * @param zooKeeper        the zookeeper object that this connection is related to.
+     * @param watcher          watcher for this connection
+     * @param clientCnxnSocket the socket implementation used (e.g. NIO/Netty)
+     * @param sessionId        session id if re-establishing session
+     * @param sessionPasswd    session passwd if re-establishing session
+     * @param canBeReadOnly    whether the connection is allowed to go to read-only
+     *                         mode in case of partitioning
      * @throws IOException
      */
     public ClientCnxn(String chrootPath, HostProvider hostProvider, int sessionTimeout, ZooKeeper zooKeeper, ClientWatchManager watcher, ClientCnxnSocket clientCnxnSocket,
@@ -437,7 +432,8 @@ public class ClientCnxn {
     class EventThread extends ZooKeeperThread {
         private final LinkedBlockingQueue<Object> waitingEvents = new LinkedBlockingQueue<Object>();
 
-        /** This is really the queued session state until the event
+        /**
+         * This is really the queued session state until the event
          * thread actually processes the event and hands it to the watcher.
          * But for all intents and purposes this is the state.
          */
@@ -653,10 +649,10 @@ public class ClientCnxn {
         // Add all the removed watch events to the event queue, so that the
         // clients will be notified with 'Data/Child WatchRemoved' event type.
         if (p.watchDeregistration != null) {
-            Map<EventType,Set<Watcher>> materializedWatchers = null;
+            Map<EventType, Set<Watcher>> materializedWatchers = null;
             try {
                 materializedWatchers = p.watchDeregistration.unregister(err);
-                for (Entry<EventType,Set<Watcher>> entry : materializedWatchers.entrySet()) {
+                for (Entry<EventType, Set<Watcher>> entry : materializedWatchers.entrySet()) {
                     Set<Watcher> watchers = entry.getValue();
                     if (watchers.size() > 0) {
                         queueEvent(p.watchDeregistration.getClientPath(), err, watchers, entry.getKey());
@@ -912,6 +908,10 @@ public class ClientCnxn {
         /**
          * Setup session, previous watches, authentication.
          * 与服务器连接成功后就会调用该方法
+         *
+         * Zookeeper客户端创建完成之后，后续就可以使用其进行请求发送，在请求发送之前，
+         * 会先检查客户端与服务端的连接是否存在（是否有对应Session），如果不存在，
+         * 则会先创建Session会话，后续的操作都会依据当前Session来发送。
          */
         void primeConnection() throws IOException {
             LOG.info("Socket connection established, initiating session, client: {}, server: {}", clientCnxnSocket.getLocalSocketAddress(),
@@ -982,7 +982,8 @@ public class ClientCnxn {
             // 2.在NIOServerCnxnFactory#configure中会创建SelectorThread
             // 3.在NIOServerCnxnFactory#start中会启动SelectorThread
             // 4.SelectorThread#run -> select -> handleIO -> workerPool.schedule(workRequest) -> 执行ScheduledWorkRequest任务
-            // 5.ScheduledWorkRequest任务：run -> doWork -> doIO -> readPayLoad -> readConnectRequest -> processConnectRequest -> createSession -> sessionTracker.createSession -> submitRequest
+            // 5.ScheduledWorkRequest任务：run -> doWork -> doIO -> readPayLoad -> readConnectRequest -> processConnectRequest -> createSession -> sessionTracker.createSession ->
+            // submitRequest
             // 6.创建Session请求会经过 PrepRequestProcessor --> SyncRequestProcessor --> FinalRequestProcessor 的处理
             // 7.FinalRequestProcessor的处理，processRequest -> ZookeeperServer#processTxn -> sessionTracker.addGlobalSession，将创建的Session添加到SessionTrack中，方便统一管理
             // 8.服务端的响应：FinalRequestProcessor.processRequest -> case OpCode.createSession -> finishSessionInit  将ConnectResponse返回给客户端
@@ -1334,8 +1335,7 @@ public class ClientCnxn {
             sessionPasswd = _sessionPasswd;
             state = (isRO) ? States.CONNECTEDREADONLY : States.CONNECTED;
             seenRwServerBefore |= !isRO;
-            LOG.info("Session establishment complete on server " + clientCnxnSocket.getRemoteSocketAddress() + ", sessionid = 0x" + Long.toHexString(sessionId) + ", negotiated " +
-                    "timeout = " + negotiatedSessionTimeout + (isRO ? " (READ-ONLY mode)" : ""));
+            LOG.info("Session establishment complete on server " + clientCnxnSocket.getRemoteSocketAddress() + ", sessionid = 0x" + Long.toHexString(sessionId) + ", negotiated " + "timeout = " + negotiatedSessionTimeout + (isRO ? " (READ-ONLY mode)" : ""));
             KeeperState eventState = (isRO) ? KeeperState.ConnectedReadOnly : KeeperState.SyncConnected;
             eventThread.queueEvent(new WatchedEvent(Watcher.Event.EventType.None, eventState, null));
         }

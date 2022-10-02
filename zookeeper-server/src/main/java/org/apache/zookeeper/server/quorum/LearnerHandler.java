@@ -565,7 +565,9 @@ public class LearnerHandler extends ZooKeeperThread {
                 int cxid;
                 int type;
 
+                // 接收到客户端的响应
                 switch (qp.getType()) {
+                    // ACK类型，说明follower已经完成该次请求事务日志的记录
                     case Leader.ACK:
                         if (this.learnerType == LearnerType.OBSERVER) {
                             if (LOG.isDebugEnabled()) {
@@ -573,6 +575,7 @@ public class LearnerHandler extends ZooKeeperThread {
                             }
                         }
                         syncLimitCheck.updateAck(qp.getZxid());
+                        // leader计算是否已经有过半的follower返回ack
                         leader.processAck(this.sid, qp.getZxid(), sock.getLocalSocketAddress());
                         break;
                     case Leader.PING:
