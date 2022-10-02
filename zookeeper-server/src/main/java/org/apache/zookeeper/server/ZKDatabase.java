@@ -76,6 +76,8 @@ public class ZKDatabase {
     protected DataTree dataTree;
     protected ConcurrentHashMap<Long, Integer> sessionsWithTimeouts;
     protected FileTxnSnapLog snapLog;
+    // minCommittedLog 表示在数据库内存中最小事务的id
+    // maxCommittedLog 表示在数据库内存中最大务的id
     protected long minCommittedLog, maxCommittedLog;
 
     /**
@@ -260,6 +262,7 @@ public class ZKDatabase {
         // 创建一个Request类用于封装事务日志的相关信息
         Request r = new Request(0, hdr.getCxid(), hdr.getType(), hdr, txn, hdr.getZxid());
         // 将事务日志信息添加到committedLog中，用于向集群中其他节点同步事务
+        // minCommittedLog保存的是第一条增量事务日志的zxid, maxCommittedLog保存的是最后以条增量事务日志的zxid
         addCommittedProposal(r);
     }
 

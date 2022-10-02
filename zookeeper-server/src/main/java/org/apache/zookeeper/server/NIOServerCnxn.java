@@ -181,6 +181,7 @@ public class NIOServerCnxn extends ServerCnxn {
                 // 只有在处理完连接请求之后才会把initialized设置为true，才可以处理客户端其他命令
                 readConnectRequest();
             } else {
+                // 处理其他类型的请求
                 readRequest();
             }
             lenBuffer.clear();

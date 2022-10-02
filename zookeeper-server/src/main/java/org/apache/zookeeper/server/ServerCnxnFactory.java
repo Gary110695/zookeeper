@@ -126,7 +126,7 @@ public abstract class ServerCnxnFactory {
     static public ServerCnxnFactory createFactory() throws IOException {
         String serverCnxnFactoryName =
             System.getProperty(ZOOKEEPER_SERVER_CNXN_FACTORY);
-        // 默认创建的是NIOServerCnxnFactory，其使用JDK原生的NIO来完成服务暴露监听
+        // 默认创建的是 NIOServerCnxnFactory，其使用JDK原生的NIO来完成服务暴露监听
         // 在性能方面，肯定是不如Netty的，所以在实际使用中，我们可以在系统中设置如下参数，主动将原生NIO服务切换为Netty服务以提高性能
         // -Dzookeeper.serverCnxnFactory=org.apache.zookeeper.server.NettyServerCnxnFactory
         if (serverCnxnFactoryName == null) {

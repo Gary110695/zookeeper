@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -57,20 +57,21 @@ public class LeaderZooKeeperServer extends QuorumZooKeeperServer {
         super(logFactory, self.tickTime, self.minSessionTimeout, self.maxSessionTimeout, zkDb, self);
     }
 
-    public Leader getLeader(){
+    public Leader getLeader() {
         return self.leader;
     }
 
+    /**
+     * LeaderZooKeeperServer处理链为：
+     * PrepRequestProcessor -> ProposalRequestProcessor -> CommitProcessor -> ToBeAppliedRequestProcessor -> FinalRequestProcessor
+     */
     @Override
     protected void setupRequestProcessors() {
         RequestProcessor finalProcessor = new FinalRequestProcessor(this);
         RequestProcessor toBeAppliedProcessor = new Leader.ToBeAppliedRequestProcessor(finalProcessor, getLeader());
-        commitProcessor = new CommitProcessor(toBeAppliedProcessor,
-                Long.toString(getServerId()), false,
-                getZooKeeperServerListener());
+        commitProcessor = new CommitProcessor(toBeAppliedProcessor, Long.toString(getServerId()), false, getZooKeeperServerListener());
         commitProcessor.start();
-        ProposalRequestProcessor proposalProcessor = new ProposalRequestProcessor(this,
-                commitProcessor);
+        ProposalRequestProcessor proposalProcessor = new ProposalRequestProcessor(this, commitProcessor);
         proposalProcessor.initialize();
         prepRequestProcessor = new PrepRequestProcessor(this, proposalProcessor);
         prepRequestProcessor.start();
@@ -80,10 +81,8 @@ public class LeaderZooKeeperServer extends QuorumZooKeeperServer {
     }
 
     private synchronized void setupContainerManager() {
-        containerManager = new ContainerManager(getZKDatabase(), prepRequestProcessor,
-                Integer.getInteger("znode.container.checkIntervalMs", (int) TimeUnit.MINUTES.toMillis(1)),
-                Integer.getInteger("znode.container.maxPerMinute", 10000)
-                );
+        containerManager = new ContainerManager(getZKDatabase(), prepRequestProcessor, Integer.getInteger("znode.container.checkIntervalMs", (int)TimeUnit.MINUTES.toMillis(1)),
+                Integer.getInteger("znode.container.maxPerMinute", 10000));
     }
 
     @Override
@@ -110,9 +109,7 @@ public class LeaderZooKeeperServer extends QuorumZooKeeperServer {
 
     @Override
     public void createSessionTracker() {
-        sessionTracker = new LeaderSessionTracker(
-                this, getZKDatabase().getSessionWithTimeOuts(),
-                tickTime, self.getId(), self.areLocalSessionsEnabled(), 
+        sessionTracker = new LeaderSessionTracker(this, getZKDatabase().getSessionWithTimeOuts(), tickTime, self.getId(), self.areLocalSessionsEnabled(),
                 getZooKeeperServerListener());
     }
 
@@ -121,8 +118,7 @@ public class LeaderZooKeeperServer extends QuorumZooKeeperServer {
     }
 
     public boolean checkIfValidGlobalSession(long sess, int to) {
-        if (self.areLocalSessionsEnabled() &&
-            !upgradeableSessionTracker.isGlobalSession(sess)) {
+        if (self.areLocalSessionsEnabled() && !upgradeableSessionTracker.isGlobalSession(sess)) {
             return false;
         }
         return sessionTracker.touchSession(sess, to);
@@ -162,9 +158,7 @@ public class LeaderZooKeeperServer extends QuorumZooKeeperServer {
         }
     }
 
-    public void registerJMX(LeaderBean leaderBean,
-            LocalPeerBean localPeerBean)
-    {
+    public void registerJMX(LeaderBean leaderBean, LocalPeerBean localPeerBean) {
         // register with JMX
         if (self.jmxLeaderElectionBean != null) {
             try {
@@ -224,8 +218,7 @@ public class LeaderZooKeeperServer extends QuorumZooKeeperServer {
     }
 
     @Override
-    protected void revalidateSession(ServerCnxn cnxn, long sessionId,
-        int sessionTimeout) throws IOException {
+    protected void revalidateSession(ServerCnxn cnxn, long sessionId, int sessionTimeout) throws IOException {
         super.revalidateSession(cnxn, sessionId, sessionTimeout);
         try {
             // setowner as the leader itself, unless updated

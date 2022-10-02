@@ -109,6 +109,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     private FileTxnSnapLog txnLogFactory = null;
     // 内存数据库
     private ZKDatabase zkDb;
+    // 在zookeeper中维护的当前分配的zxid，是leader用来进行事务的zxid的分配的
     private final AtomicLong hzxid = new AtomicLong(0);
     public final static Exception ok = new Exception("No prob");
     protected RequestProcessor firstProcessor;
@@ -280,13 +281,15 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
          */
         // 在 ZKDatabase#loadDataBase 中会将 initialized 由 false 改为 true
         if (zkDb.isInitialized()) {
+            // 设置为最后处理的Zxid
             setZxid(zkDb.getDataTreeLastProcessedZxid());
         } else {
+            // 未被初始化，则加载内存数据库
             setZxid(zkDb.loadDataBase());
         }
 
         // Clean up dead sessions
-        // 有过期的会话，会直接删除
+        // 遍历所有的会话，删除过期的会话
         LinkedList<Long> deadSessions = new LinkedList<Long>();
         for (Long session : zkDb.getSessions()) {
             if (zkDb.getSessionWithTimeOuts().get(session) == null) {
@@ -795,6 +798,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
             touch(si.cnxn);
             boolean validpacket = Request.isValid(si.type);
             if (validpacket) {
+                // 交由PrepRequestProcessor进行处理
                 firstProcessor.processRequest(si);
                 if (si.cnxn != null) {
                     incInProcess();

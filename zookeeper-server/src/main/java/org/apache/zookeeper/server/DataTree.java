@@ -748,6 +748,12 @@ public class DataTree {
 
     }
 
+    // 这表示的是当前的处理的事务的最大的zxid（这个值在服务器在稳定的事务处理阶段是和磁盘中记录的值是不同的，因为leader是先写事务日志，
+    // 此时事务日志中的事务id已经比内存数据中的lastProcessedZxid大了，然后再commit之后这条事务才应用到内存数据库，此时才更新。但是在
+    // 选举恢复阶段，这个值是和磁盘中的事务最大日志zxid相同的，因为在shutdown的时候会将磁盘中的事务日志都加载进内存中）
+    // leader的lastProceeedZxid对应的epoch一定是大于等于follower对应的lastProcessedZxid对应的epoch。如果follower的lastProceesedZxid要
+    // 大于leader的，那么follower的currentEpoch一定是大于leader的currentEpoch，因为每个节点都是先走恢复阶段再走同步阶段，所以currentEpoch
+    // 一定是大于等于zxid对应的epoch，但是对于leader的currentEpoch一定是大于等于follower的，故此leader的lastProcessedZxid的epoch一定是大于等于follower的。
     public volatile long lastProcessedZxid = 0;
 
     public ProcessTxnResult processTxn(TxnHeader header, Record txn) {
@@ -977,10 +983,13 @@ public class DataTree {
         // so there is no need for synchronization. The list is not
         // changed here. Only create and delete change the list which
         // are again called from FinalRequestProcessor in sequence.
+        // 移除session，并获取该session对应的所有临时节点
         HashSet<String> list = ephemerals.remove(session);
         if (list != null) {
+            // 遍历所有临时节点
             for (String path : list) {
                 try {
+                    // 删除路径对应的节点
                     deleteNode(path, zxid);
                     if (LOG.isDebugEnabled()) {
                         LOG.debug("Deleting ephemeral node " + path + " for session 0x" + Long.toHexString(session));

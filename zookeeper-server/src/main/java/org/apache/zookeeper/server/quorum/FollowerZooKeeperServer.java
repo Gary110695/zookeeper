@@ -65,6 +65,10 @@ public class FollowerZooKeeperServer extends LearnerZooKeeperServer {
         return self.follower;
     }
 
+    /**
+     * FollowerZooKeeperServer接收到客户端请求时的处理链：
+     * FollowerRequestProcessor -> CommitProcessor -> FinalRequestProcessor
+     */
     @Override
     protected void setupRequestProcessors() {
         RequestProcessor finalProcessor = new FinalRequestProcessor(this);

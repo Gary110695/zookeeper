@@ -861,6 +861,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements Req
                 case OpCode.setWatches:
                 case OpCode.checkWatches:
                 case OpCode.removeWatches:
+                    // 针对非事务请求，只进行会话检查，然后直接交由下一个processor处理
                     zks.sessionTracker.checkSession(request.sessionId, request.getOwner());
                     break;
                 default:

@@ -1179,6 +1179,13 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
         try {
             /*
              * Main loop
+             *
+             * leader：集群中有且仅有一个leader，通过选举过程产生。负责所有事务写操作（会话状态变更及数据节点变更操作），保证集群事务处理的顺序性。默认设置下，leader也处理读请求。
+             *
+             * follower：处理客户端非事务请求，转发事务请求给leader服务器；参与leader选举投票，参与事务操作的“过半通过”投票策略。
+             *
+             * observer：只提供读取服务。在不影响写性能的情况下提升集群读取性能。不参与任何形式的投票。
+             *
              */
             while (running) {
                 switch (getPeerState()) {
@@ -1279,6 +1286,8 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
                         LOG.info("LEADING");
                         try {
                             setLeader(makeLeader(logFactory));
+                            // leader选举完成后，当前leader节点只是一个准leader节点，后续还需要与follower一系列的操作之后，才会真正的变成leader节点，同时对外提供服务
+                            // 具体逻辑在lead方法中
                             leader.lead();
                             setLeader(null);
                         } catch (Exception e) {
@@ -1888,7 +1897,46 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
         }
     }
 
+    /**
+     * Users may confuse about these two variables:acceptedEpoch and currentEpoch introduced by this ticket.
+     *
+     * The implementation up to version 3.3.3 has not included epoch variables acceptedEpoch and currentEpoch. This omission has generated problems in a production version and
+     * was noticed by many ZooKeeper clients.
+     *
+     * − acceptedEpoch: the epoch number of the last NEWEPOCH message accepted;
+     * − currentEpoch: the epoch number of the last NEWLEADER message accepted;
+     *
+     * The origin of this problem is at the beginning of Recovery Phase, when the leader increments its epoch (contained in lastZxid) even before acquiring a quorum of
+     * successfully connected followers (such leader is called false leader). Since a follower goes back to FLE if its epoch is larger than the leader’s epoch, when a false
+     * leader drops leadership and becomes a follower of a leader from a previous epoch, it finds a smaller epoch and goes back to FLE. This behavior can loop, switching from
+     * Recovery Phase to FLE repeatedly.
+     *
+     * Consequently, using lastZxid to store the epoch number, there is no distinction between a tried epoch and a joined epoch in the implementation. Those are the respective
+     * purposes for acceptedEpoch and currentEpoch, hence the omission of them render such problems.
+     *
+     * More details can be found in this report paper: ZooKeeper’s atomic broadcast protocol: Theory and practice. Andr ́e Medeiros March 20, 2012
+     *
+     * https://issues.apache.org/jira/browse/ZOOKEEPER-3608
+     *
+     * 意思是，以前是不区分acceptedEpoch 和 currentEpoch的，以前epoch是直接从zxid中前32位里提取的。但这会导致一个问题：假设有三个服务器s1, s2, s3. 集群s1和s2取得联系，且s1为leader，s3为LOOKING:
+     *
+     * 1. s2重启，加上s3的选票，将s3选为leader
+     * 2. s3把自己当做leader，且epoch+1，但无法与其它server取得联系。此时s1还是认为自己是leader(后文会问为什么)。
+     * 3. s2无法与s3取得联系，同时收到s1的LEADING信息，便回到s1的旧集群里
+     * 4. s3无法与他人取得联系，退出leadership，回到FLE，并收到旧集群leader s1的消息，便作为follower也回到旧集群里
+     * 5. s3作为follower发现自己的epoch比旧leader的epoch还大，便又回到FLE
+     *
+     * 之后s3就不断在4和5之间徘徊，不断在FLE阶段和RECOVER阶段循环。
+     *
+     * 别的都讲得通，但还有个关键疑惑，不是说"leader在不能与半数以上follower取得联系时，会重回选举FLE"吗？那旧集群的follower s2重启时，为何s1会仍然会认为自己是LEADER?
+     *
+     * https://www.jianshu.com/p/7a2b5baf17e9
+     */
+
+    // 表示的是NEWEPOCH消息接收的epoch
     private long acceptedEpoch = -1;
+
+    // 表示的是NEWLEADER消息接收的epoch
     private long currentEpoch = -1;
 
     public static final String CURRENT_EPOCH_FILENAME = "currentEpoch";
