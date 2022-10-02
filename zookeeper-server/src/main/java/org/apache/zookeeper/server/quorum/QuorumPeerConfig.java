@@ -145,12 +145,14 @@ public class QuorumPeerConfig {
             Properties cfg = new Properties();
             FileInputStream in = new FileInputStream(configFile);
             try {
+                // 加载配置文件到Properties中
                 cfg.load(in);
                 configFileStr = path;
             }finally {
                 in.close();
             }
 
+            // 将Properties中对应属性回写到QuorumPeerConfig中
             parseProperties(cfg);
         }catch (IOException e) {
             throw new ConfigException("Error processing " + path, e);

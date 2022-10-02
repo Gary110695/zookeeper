@@ -974,8 +974,18 @@ public class ClientCnxn {
             // 将该请求封装成Packet对象，放入到outgoingQueue队列的队头
             // 在SendThread.run -> doTransport -> doIO -> sockKey.isReadable() -> readConnectResult 读取该请求对应的响应
             outgoingQueue.addFirst(new Packet(null, null, conReq, null, null, readOnly));
+
             // 注册感兴趣事件为 读、写
             clientCnxnSocket.connectionPrimed();
+            // 服务端处理ConnectRequest的流程：
+            // 1.在服务器启动时，会创建ServerCnxnFactory组件，实际类型默认为NIOServerCnxnFactory
+            // 2.在NIOServerCnxnFactory#configure中会创建SelectorThread
+            // 3.在NIOServerCnxnFactory#start中会启动SelectorThread
+            // 4.SelectorThread#run -> select -> handleIO -> workerPool.schedule(workRequest) -> 执行ScheduledWorkRequest任务
+            // 5.ScheduledWorkRequest任务：run -> doWork -> doIO -> readPayLoad -> readConnectRequest -> processConnectRequest -> createSession -> sessionTracker.createSession -> submitRequest
+            // 6.创建Session请求会经过 PrepRequestProcessor --> SyncRequestProcessor --> FinalRequestProcessor 的处理
+            // 7.FinalRequestProcessor的处理，processRequest -> ZookeeperServer#processTxn -> sessionTracker.addGlobalSession，将创建的Session添加到SessionTrack中，方便统一管理
+            // 8.服务端的响应：FinalRequestProcessor.processRequest -> case OpCode.createSession -> finishSessionInit  将ConnectResponse返回给客户端
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Session establishment request sent on " + clientCnxnSocket.getRemoteSocketAddress());
             }

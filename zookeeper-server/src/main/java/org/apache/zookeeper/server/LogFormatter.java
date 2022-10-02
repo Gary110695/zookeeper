@@ -41,7 +41,7 @@ public class LogFormatter {
     private static final Logger LOG = LoggerFactory.getLogger(LogFormatter.class);
 
     /**
-     * @param args
+     * @param args  指定需要查看的事务日志文件路径
      */
     public static void main(String[] args) throws Exception {
         if (args.length != 1) {

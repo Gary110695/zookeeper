@@ -118,6 +118,7 @@ public class LeaderSessionTracker extends UpgradeableSessionTracker {
             localSessionTracker.touchSession(sessionId, sessionTimeout)) {
             return true;
         }
+        // 调用SessionTrackerImpl#touchSession
         return globalSessionTracker.touchSession(sessionId, sessionTimeout);
     }
 

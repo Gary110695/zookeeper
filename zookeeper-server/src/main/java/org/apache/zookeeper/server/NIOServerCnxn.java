@@ -172,10 +172,13 @@ public class NIOServerCnxn extends ServerCnxn {
             }
         }
 
+        // remaining() == 0，说明已经读取到len个字节，数据已经全部读取到
         if (incomingBuffer.remaining() == 0) { // have we read length bytes?
             packetReceived();
             incomingBuffer.flip();
             if (!initialized) {
+                // initialized 为 false 时，需要去创建session
+                // 只有在处理完连接请求之后才会把initialized设置为true，才可以处理客户端其他命令
                 readConnectRequest();
             } else {
                 readRequest();
@@ -318,6 +321,7 @@ public class NIOServerCnxn extends ServerCnxn {
                 return;
             }
             if (k.isReadable()) {
+                // 读取4字节数据，也就是ConnectRequest中的头4个字节 len字段
                 int rc = sock.read(incomingBuffer);
                 if (rc < 0) {
                     throw new EndOfStreamException(
@@ -325,10 +329,12 @@ public class NIOServerCnxn extends ServerCnxn {
                             + Long.toHexString(sessionId)
                             + ", likely client has closed socket");
                 }
+                // 读取到完整的4字节
                 if (incomingBuffer.remaining() == 0) {
                     boolean isPayload;
                     if (incomingBuffer == lenBuffer) { // start of next request
                         incomingBuffer.flip();
+                        // 给incomingBuffer分配len字节
                         isPayload = readLength(k);
                         incomingBuffer.clear();
                     } else {
@@ -336,6 +342,7 @@ public class NIOServerCnxn extends ServerCnxn {
                         isPayload = true;
                     }
                     if (isPayload) { // not the case for 4letterword
+                        // 读取len字节的数据
                         readPayload();
                     }
                     else {

@@ -108,7 +108,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                 }
             }
         }
-        // 有数据可写，说明outgoingQueue被添加了数据
+        // 有数据可写
         if (sockKey.isWritable()) {
             Packet p = findSendablePacket(outgoingQueue, sendThread.tunnelAuthInProgress());
 

@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -35,9 +35,12 @@ import org.apache.zookeeper.KeeperException.SessionMovedException;
 public interface SessionTracker {
     public static interface Session {
         long getSessionId();
+
         int getTimeout();
+
         boolean isClosing();
     }
+
     public static interface SessionExpirer {
         void expire(Session session);
 
@@ -104,9 +107,7 @@ public interface SessionTracker {
      * @param sessionId
      * @param owner
      */
-    public void checkSession(long sessionId, Object owner)
-            throws KeeperException.SessionExpiredException,
-            KeeperException.SessionMovedException,
+    public void checkSession(long sessionId, Object owner) throws KeeperException.SessionExpiredException, KeeperException.SessionMovedException,
             KeeperException.UnknownSessionException;
 
     /**
@@ -116,9 +117,7 @@ public interface SessionTracker {
      * @throws KeeperException.SessionExpiredException
      * @throws KeeperException.SessionMovedException
      */
-    public void checkGlobalSession(long sessionId, Object owner)
-            throws KeeperException.SessionExpiredException,
-            KeeperException.SessionMovedException;
+    public void checkGlobalSession(long sessionId, Object owner) throws KeeperException.SessionExpiredException, KeeperException.SessionMovedException;
 
     void setOwner(long id, Object owner) throws SessionExpiredException;
 
@@ -131,5 +130,5 @@ public interface SessionTracker {
     /**
      * Returns a mapping of time to session IDs that expire at that time.
      */
-    Map<Long, Set<Long>> getSessionExpiryMap();
+    Map<Long,Set<Long>> getSessionExpiryMap();
 }

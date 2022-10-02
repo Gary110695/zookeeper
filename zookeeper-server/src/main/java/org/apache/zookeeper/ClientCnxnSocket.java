@@ -148,7 +148,7 @@ abstract class ClientCnxnSocket {
             LOG.warn("Connected to an old server; r-o mode will be unavailable");
         }
 
-        // 服务端分配的唯一的一个会话ID，用于标识会话
+        // 获取服务端分配的唯一的一个会话ID，用于标识会话
         this.sessionId = conRsp.getSessionId();
         sendThread.onConnected(conRsp.getTimeOut(), this.sessionId, conRsp.getPasswd(), isRO);
     }

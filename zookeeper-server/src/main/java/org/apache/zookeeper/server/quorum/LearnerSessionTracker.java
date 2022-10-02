@@ -140,6 +140,10 @@ public class LearnerSessionTracker extends UpgradeableSessionTracker {
                 return false;
             }
         }
+        // 对于LearnerSessionTracker来说，touchSession只是简单的更新下touchTable
+        // Learner（Follower + Observer）是不管理会话的，Leader才有管理会话的职责
+        // 当Learner接收到来自Leader的心跳，构建心跳响应时，将touchTable中的会话信息（sessionId+sessionTimeout）
+        // 全部取出来发送给Leader，让Leader去触发会话激活
         touchTable.get().put(sessionId, sessionTimeout);
         return true;
     }

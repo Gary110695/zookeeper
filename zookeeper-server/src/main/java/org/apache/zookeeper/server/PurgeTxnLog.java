@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -48,13 +48,12 @@ public class PurgeTxnLog {
 
     private static final String COUNT_ERR_MSG = "count should be greater than or equal to 3";
 
-    static void printUsage(){
+    static void printUsage() {
         System.out.println("Usage:");
         System.out.println("PurgeTxnLog dataLogDir [snapDir] -n count");
         System.out.println("\tdataLogDir -- path to the txn log directory");
         System.out.println("\tsnapDir -- path to the snapshot directory");
-        System.out.println("\tcount -- the number of old snaps/logs you want " +
-            "to keep, value should be greater than or equal to 3");
+        System.out.println("\tcount -- the number of old snaps/logs you want " + "to keep, value should be greater than or equal to 3");
     }
 
     private static final String PREFIX_SNAPSHOT = "snapshot";
@@ -65,6 +64,13 @@ public class PurgeTxnLog {
      * corresponding logs. If logs are rolling or a new snapshot is created
      * during this process, these newest N snapshots or any data logs will be
      * excluded from current purging cycle.
+     *
+     * 创建事物快照日志文件对象FileTxnSnapLog，然后根据参数获取获取到需要保留的文件数量，
+     * 然后根据保留的文件数量计算出保留文件中最小的那个zxid，然后根据最小的zxid找到需要
+     * 保留的事物日志文件列表（事物日志当前最小的那个id之前的1个不能清理在zookeeper事物
+     * 日志中可能发生滚动日志之前的文件也是会记录到最新的数据），然后过滤所有事物日志文件
+     * ，过滤出来需要删除的事物日志文件，在过滤所有的快照文件找到所有需要删除的快照文件，
+     * 最后循环删除需要删除的事物日志和快照文件
      *
      * @param dataDir the dir that has the logs
      * @param snapDir the dir that has the snapshots
@@ -81,14 +87,15 @@ public class PurgeTxnLog {
         List<File> snaps = txnLog.findNRecentSnapshots(num);
         int numSnaps = snaps.size();
         if (numSnaps > 0) {
+            // 清理这num个文件之外的其他文件
             purgeOlderSnapshots(txnLog, snaps.get(numSnaps - 1));
         }
     }
 
     // VisibleForTesting
     static void purgeOlderSnapshots(FileTxnSnapLog txnLog, File snapShot) {
-        final long leastZxidToBeRetain = Util.getZxidFromName(
-                snapShot.getName(), PREFIX_SNAPSHOT);
+        // 只要比这个zxid小的文件都需要被清理
+        final long leastZxidToBeRetain = Util.getZxidFromName(snapShot.getName(), PREFIX_SNAPSHOT);
 
         /**
          * We delete all files with a zxid in their name that is less than leastZxidToBeRetain.
@@ -110,20 +117,24 @@ public class PurgeTxnLog {
          * calling txnLog.getSnapshotLogs().
          */
         final Set<File> retainedTxnLogs = new HashSet<File>();
+        // 找到所有需要保留的事物日志集合
         retainedTxnLogs.addAll(Arrays.asList(txnLog.getSnapshotLogs(leastZxidToBeRetain)));
 
         /**
          * Finds all candidates for deletion, which are files with a zxid in their name that is less
          * than leastZxidToBeRetain.  There's an exception to this rule, as noted above.
          */
-        class MyFileFilter implements FileFilter{
+        class MyFileFilter implements FileFilter {
             private final String prefix;
-            MyFileFilter(String prefix){
-                this.prefix=prefix;
+
+            MyFileFilter(String prefix) {
+                this.prefix = prefix;
             }
-            public boolean accept(File f){
-                if(!f.getName().startsWith(prefix + "."))
-                    return false;
+
+            public boolean accept(File f) {
+                // 文件前缀不一致的不清理
+                if (!f.getName().startsWith(prefix + ".")) return false;
+                // 需要保留的文件列表里面存在当前文件不清理
                 if (retainedTxnLogs.contains(f)) {
                     return false;
                 }
@@ -131,10 +142,12 @@ public class PurgeTxnLog {
                 if (fZxid >= leastZxidToBeRetain) {
                     return false;
                 }
+                // zxid小于当前需要保留的最小zxid的才能清理
                 return true;
             }
         }
         // add all non-excluded log files
+        // 过滤出来需要删除的事物日志文件列表
         File[] logs = txnLog.getDataDir().listFiles(new MyFileFilter(PREFIX_LOG));
         List<File> files = new ArrayList<>();
         if (logs != null) {
@@ -142,26 +155,25 @@ public class PurgeTxnLog {
         }
 
         // add all non-excluded snapshot files to the deletion list
+        // 过滤出来需要删除的快照文件列表
         File[] snapshots = txnLog.getSnapDir().listFiles(new MyFileFilter(PREFIX_SNAPSHOT));
         if (snapshots != null) {
             files.addAll(Arrays.asList(snapshots));
         }
 
         // remove the old files
-        for(File f: files)
-        {
-            final String msg = "Removing file: "+
-                DateFormat.getDateTimeInstance().format(f.lastModified())+
-                "\t"+f.getPath();
+        // 删除所有需要清理的事物日志文件和快照文件
+        for (File f : files) {
+            final String msg = "Removing file: " + DateFormat.getDateTimeInstance().format(f.lastModified()) + "\t" + f.getPath();
             LOG.info(msg);
             System.out.println(msg);
-            if(!f.delete()){
-                System.err.println("Failed to remove "+f.getPath());
+            if (!f.delete()) {
+                System.err.println("Failed to remove " + f.getPath());
             }
         }
 
     }
-    
+
     /**
      * @param args dataLogDir [snapDir] -n count
      * dataLogDir -- path to the txn log directory
@@ -199,8 +211,7 @@ public class PurgeTxnLog {
     private static File validateAndGetFile(String path) {
         File file = new File(path);
         if (!file.exists()) {
-            System.err.println("Path '" + file.getAbsolutePath()
-                    + "' does not exist. ");
+            System.err.println("Path '" + file.getAbsolutePath() + "' does not exist. ");
             printUsageThenExit();
         }
         return file;
@@ -222,8 +233,7 @@ public class PurgeTxnLog {
                 printUsageThenExit();
             }
         } catch (NumberFormatException e) {
-            System.err
-                    .println("'" + number + "' can not be parsed to integer.");
+            System.err.println("'" + number + "' can not be parsed to integer.");
             printUsageThenExit();
         }
         return result;

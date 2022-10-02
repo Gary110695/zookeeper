@@ -59,8 +59,11 @@ import org.slf4j.LoggerFactory;
 /**
  * This class maintains the in memory database of zookeeper
  * server states that includes the sessions, datatree and the
- * committed logs. It is booted up  after reading the logs
+ * committed logs. It is booted up after reading the logs
  * and snapshots from the disk.
+ *
+ * Zookeeper的响应之所以快，一部分原因与它的节点数据都加载到内存有关。避免了每次节点查询都到磁盘中查询。
+ * ZKDatabase，就是作为Zookeeper的内存数据库而存在
  */
 public class ZKDatabase {
 
@@ -254,7 +257,9 @@ public class ZKDatabase {
     }
 
     private void addCommittedProposal(TxnHeader hdr, Record txn) {
+        // 创建一个Request类用于封装事务日志的相关信息
         Request r = new Request(0, hdr.getCxid(), hdr.getType(), hdr, txn, hdr.getZxid());
+        // 将事务日志信息添加到committedLog中，用于向集群中其他节点同步事务
         addCommittedProposal(r);
     }
 

@@ -12,7 +12,7 @@ import java.io.IOException;
 public class ZkClient {
 
     private String connectString = "127.0.0.1:2181";
-    private int sessionTimeout = 3000;
+    private int sessionTimeout = 300000000;
     ZooKeeper zkCli = null;
 
     // 初始化客户端
@@ -24,7 +24,12 @@ public class ZkClient {
     // 创建子节点
     @Test
     public void createZnode() throws KeeperException, InterruptedException {
-        String path = zkCli.create("/hello2", "world".getBytes(), ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+        String path = zkCli.create("/hello", "world".getBytes(), ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
         System.out.println(path);
+    }
+
+    @Test
+    public void test() {
+        while (true);
     }
 }

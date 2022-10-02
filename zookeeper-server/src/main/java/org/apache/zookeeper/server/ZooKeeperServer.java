@@ -407,6 +407,8 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         }
         long id = cnxn.getSessionId();
         int to = cnxn.getSessionTimeout();
+        // 当服务端接收到客户端的请求（无论是正常的业务请求还是心跳请求），都会更新session的过期时间
+        // ZookeeperServer.processPacket 处理客户端请求 -> submitRequest -> touch
         if (!sessionTracker.touchSession(id, to)) {
             throw new MissingSessionException("No session with sessionid 0x" + Long.toHexString(id) + " exists, probably expired and removed");
         }
@@ -442,10 +444,12 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     }
 
     public synchronized void startup() {
+        // sessionTracker是会话管理器，负责会话的创建、管理清理等操作
         if (sessionTracker == null) {
             createSessionTracker();
         }
         startSessionTracker();
+        // 业务处理器
         setupRequestProcessors();
 
         registerJMX();
@@ -668,6 +672,10 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         cnxn.setSessionId(sessionId);
         Request si = new Request(cnxn, sessionId, 0, OpCode.createSession, to, null);
         setLocalSessionFlag(si);
+        // 创建一个OpCode.createSession的请求并提交，createSession请求经过请求处理链(RequestProcessor)
+        // 1.在PrepRequestProcessor中设置Request的txn
+        // 2.在SyncRequestProcessor对txn（创建session的操作）进行持久化
+        // 3.在FinalRequestProcessor会对Session进行提交，其实就是把Session的ID和Timeout存到SessionTrackerImpl#sessionsWithTimeout中去
         submitRequest(si);
         return sessionId;
     }
@@ -782,6 +790,8 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
             }
         }
         try {
+            // 服务端无论接受什么请求都会更新Session的过期时间
+            // 此时还没有交给第一个请求处理器处理
             touch(si.cnxn);
             boolean validpacket = Request.isValid(si.type);
             if (validpacket) {
@@ -985,6 +995,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
             LOG.info(msg);
             throw new CloseRequestException(msg);
         }
+        // 如果请求的lastZXID 大于 server端的最新的ZXID，说明客户端请求异常
         if (connReq.getLastZxidSeen() > zkDb.dataTree.lastProcessedZxid) {
             String msg = "Refusing session request for client " + cnxn.getRemoteSocketAddress() + " as it has seen zxid 0x" + Long.toHexString(connReq.getLastZxidSeen()) + " our" +
                     " last zxid is 0x" + Long.toHexString(getZKDatabase().getDataTreeLastProcessedZxid()) + " client must try another server";
@@ -992,6 +1003,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
             LOG.info(msg);
             throw new CloseRequestException(msg);
         }
+        // 与服务端协商session超时时间，需要介于minSessionTimeout 和 maxSessionTimeout之间
         int sessionTimeout = connReq.getTimeOut();
         byte passwd[] = connReq.getPasswd();
         int minSessionTimeout = getMinSessionTimeout();
@@ -1007,7 +1019,10 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         // session is setup
         cnxn.disableRecv();
         long sessionId = connReq.getSessionId();
+        // 如果客户端是首次连接，那么sessionId未分配过，则默认为0，如果不是0，说明之前已经分配过
+        // 但由于某种原因，又断开重连了，所以服务端针对这种连接会重新打开对应的session
         if (sessionId == 0) {
+            // 首次连接，需要创建Session
             long id = createSession(cnxn, passwd, sessionTimeout);
             LOG.debug("Client attempting to establish new session:" + " session = 0x{}, zxid = 0x{}, timeout = {}, address = {}", Long.toHexString(id),
                     Long.toHexString(connReq.getLastZxidSeen()), connReq.getTimeOut(), cnxn.getRemoteSocketAddress());
@@ -1022,6 +1037,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
                 secureServerCnxnFactory.closeSession(sessionId);
             }
             cnxn.setSessionId(sessionId);
+            // 重新打开对应的session
             reopenSession(cnxn, sessionId, passwd, sessionTimeout);
         }
     }
@@ -1037,6 +1053,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         // We have the request, now process and setup for next
         InputStream bais = new ByteBufferInputStream(incomingBuffer);
         BinaryInputArchive bia = BinaryInputArchive.getArchive(bais);
+        // 解析请求头，请求头中的type代表了不同的请求类型
         RequestHeader h = new RequestHeader();
         h.deserialize(bia, "header");
         // Through the magic of byte buffers, txn will not be

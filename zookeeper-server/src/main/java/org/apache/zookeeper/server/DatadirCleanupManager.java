@@ -46,12 +46,16 @@ public class DatadirCleanupManager {
 
     private PurgeTaskStatus purgeTaskStatus = PurgeTaskStatus.NOT_STARTED;
 
+    // 快照日志路径
     private final File snapDir;
 
+    // 事务日志路径
     private final File dataLogDir;
 
+    // 需要保留的文件个数
     private final int snapRetainCount;
 
+    // 间隔多久执行一次清理，单位是小时
     private final int purgeInterval;
 
     private Timer timer;

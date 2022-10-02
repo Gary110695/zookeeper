@@ -43,6 +43,7 @@ public class SnapshotFormatter {
 
     /**
      * USAGE: SnapshotFormatter snapshot_file
+     * 指定快照日志路径
      */
     public static void main(String[] args) throws Exception {
         if (args.length != 1) {
