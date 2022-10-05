@@ -47,6 +47,7 @@ class Person implements Record {
 
     public void serialize(OutputArchive archive, String tag) throws IOException {
         // 每个以startRecord开头，endRecord结尾
+        // 在解析的时候就会按照这个固定的格式来解析，从而保证解析出来完整的数据包
         archive.startRecord(this, tag);
         archive.writeInt(age, "age");
         archive.writeString(name, "name");

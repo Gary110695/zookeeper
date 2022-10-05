@@ -46,6 +46,7 @@ public class ExpiryQueue<E> {
     private final ConcurrentHashMap<Long, Set<E>> expiryMap = new ConcurrentHashMap<Long, Set<E>>();
 
     private final AtomicLong nextExpirationTime = new AtomicLong();
+
     // SessionTrackerImpl线程会定期地进行会话过期检查，其时间间隔是expirationInterval，单位是毫秒，默认是 tickTime，即默认情况下，每隔 2000 毫秒进行一次会话过期检查
     private final int expirationInterval;
 
@@ -91,7 +92,7 @@ public class ExpiryQueue<E> {
         Long prevExpiryTime = elemMap.get(elem);
         long now = Time.currentElapsedTime();
         // 获取新的过期时间newExpiryTime
-        // 假设当前时间为 1644377660000，sessionTimeout为 20000
+        // 假设当前时间为 1644377660000，sessionTimeout 为 20000
         // time = 1644377660000 + 20000 = 1644377680000
         // newExpiryTime = (1644377680000 / 2000 + 1) * 2000 = 1644377682000        / 是向下取整，+1就是向上取整，宁可大也不能比原来小
         // 因此会话过期时长在 20000 ~ 22000 范围的会话会放在一个桶里管理，清理的时候会把这个桶取出，将这些会话一并清理

@@ -78,7 +78,7 @@ import org.slf4j.LoggerFactory;
  * This class implements a simple standalone ZooKeeperServer. It sets up the
  * following chain of RequestProcessors to process requests:
  * PrepRequestProcessor -> SyncRequestProcessor -> FinalRequestProcessor
- *
+ * <p>
  * 作为一个ZookeeperServer，在处理请求时的流程链为：PrepRequestProcessor -> SyncRequestProcessor -> FinalRequestProcessor
  */
 public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
@@ -98,9 +98,13 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     protected int tickTime = DEFAULT_TICK_TIME;
 
     // session超时时间
-    /** value of -1 indicates unset, use default */
+    /**
+     * value of -1 indicates unset, use default
+     */
     protected int minSessionTimeout = -1;
-    /** value of -1 indicates unset, use default */
+    /**
+     * value of -1 indicates unset, use default
+     */
     protected int maxSessionTimeout = -1;
 
     // session管理器
@@ -109,7 +113,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     private FileTxnSnapLog txnLogFactory = null;
     // 内存数据库
     private ZKDatabase zkDb;
-    // 在zookeeper中维护的当前分配的zxid，是leader用来进行事务的zxid的分配的
+    // 在zookeeper中维护的当前分配给事务请求的zxid，是leader用来进行事务的zxid的分配的，每次分配时调用getNextZxid方法进行递增
     private final AtomicLong hzxid = new AtomicLong(0);
     public final static Exception ok = new Exception("No prob");
     protected RequestProcessor firstProcessor;
@@ -131,7 +135,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     private final AtomicInteger requestsInProcess = new AtomicInteger(0);
     final Deque<ChangeRecord> outstandingChanges = new ArrayDeque<>();
     // this data structure must be accessed under the outstandingChanges lock
-    final HashMap<String,ChangeRecord> outstandingChangesForPath = new HashMap<String,ChangeRecord>();
+    final HashMap<String, ChangeRecord> outstandingChangesForPath = new HashMap<String, ChangeRecord>();
 
     // 服务端口连接处理器
     protected ServerCnxnFactory serverCnxnFactory;
@@ -180,8 +184,9 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
 
     /**
      * creates a zookeeperserver instance.
+     *
      * @param txnLogFactory the file transaction snapshot logging class
-     * @param tickTime the ticktime for the server
+     * @param tickTime      the ticktime for the server
      * @throws IOException
      */
     public ZooKeeperServer(FileTxnSnapLog txnLogFactory, int tickTime) throws IOException {
@@ -243,6 +248,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
 
     /**
      * get the zookeeper database for this server
+     *
      * @return the zookeeper database for this server
      */
     public ZKDatabase getZKDatabase() {
@@ -251,6 +257,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
 
     /**
      * set the zkdatabase for this zookeeper server
+     *
      * @param zkDb
      */
     public void setZKDatabase(ZKDatabase zkDb) {
@@ -258,7 +265,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     }
 
     /**
-     *  Restore sessions and data
+     * Restore sessions and data
      */
     public void loadData() throws IOException, InterruptedException {
         /*
@@ -447,7 +454,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     }
 
     public synchronized void startup() {
-        // sessionTracker是会话管理器，负责会话的创建、管理清理等操作
+        // sessionTracker是会话管理器，负责会话的创建、管理、清理等操作
         if (sessionTracker == null) {
             createSessionTracker();
         }
@@ -525,7 +532,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
      * is already shutdown or not.
      *
      * @return true if the server is running or server hits an error, false
-     *         otherwise.
+     * otherwise.
      */
     protected boolean canShutdown() {
         return state == State.RUNNING || state == State.ERROR;
@@ -544,6 +551,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
 
     /**
      * Shut down the server instance
+     *
      * @param fullyShutDown true if another server using the same database will not replace this one in the same process
      */
     public synchronized void shutdown(boolean fullyShutDown) {
@@ -675,17 +683,18 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         cnxn.setSessionId(sessionId);
         Request si = new Request(cnxn, sessionId, 0, OpCode.createSession, to, null);
         setLocalSessionFlag(si);
-        // 创建一个OpCode.createSession的请求并提交，createSession请求经过请求处理链(RequestProcessor)
+        // 创建一个OpCode.createSession的请求并提交，createSession请求经过请求处理链（RequestProcessor）
         // 1.在PrepRequestProcessor中设置Request的txn
-        // 2.在SyncRequestProcessor对txn（创建session的操作）进行持久化
-        // 3.在FinalRequestProcessor会对Session进行提交，其实就是把Session的ID和Timeout存到SessionTrackerImpl#sessionsWithTimeout中去
+        // 2.在SyncRequestProcessor对txn（创建session的操作）进行事务日志持久化
+        // 3.在FinalRequestProcessor会创建ConnectResponse，并响应给客户端
         submitRequest(si);
         return sessionId;
     }
 
     /**
      * set the owner of this session as owner
-     * @param id the session id
+     *
+     * @param id    the session id
      * @param owner the owner of the session
      * @throws SessionExpiredException
      */
@@ -793,7 +802,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
             }
         }
         try {
-            // 服务端无论接受什么请求都会更新Session的过期时间
+            // 服务端无论接收什么请求都会更新Session的过期时间
             // 此时还没有交给第一个请求处理器处理
             touch(si.cnxn);
             boolean validpacket = Request.isValid(si.type);
@@ -897,8 +906,9 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     /**
      * trunccate the log to get in sync with others
      * if in a quorum
+     *
      * @param zxid the zxid that it needs to get in sync
-     * with others
+     *             with others
      * @throws IOException
      */
     public void truncateLog(long zxid) throws IOException {
@@ -940,7 +950,9 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         return secureServerCnxnFactory != null ? secureServerCnxnFactory.getLocalPort() : -1;
     }
 
-    /** Maximum number of connections allowed from particular host (ip) */
+    /**
+     * Maximum number of connections allowed from particular host (ip)
+     */
     public int getMaxClientCnxnsPerHost() {
         if (serverCnxnFactory != null) {
             return serverCnxnFactory.getMaxClientCnxnsPerHost();
@@ -974,7 +986,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         zkDb.dumpEphemerals(pwriter);
     }
 
-    public Map<Long,Set<String>> getEphemerals() {
+    public Map<Long, Set<String>> getEphemerals() {
         return zkDb.getEphemerals();
     }
 
@@ -1001,8 +1013,8 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         }
         // 如果请求的lastZXID 大于 server端的最新的ZXID，说明客户端请求异常
         if (connReq.getLastZxidSeen() > zkDb.dataTree.lastProcessedZxid) {
-            String msg = "Refusing session request for client " + cnxn.getRemoteSocketAddress() + " as it has seen zxid 0x" + Long.toHexString(connReq.getLastZxidSeen()) + " our" +
-                    " last zxid is 0x" + Long.toHexString(getZKDatabase().getDataTreeLastProcessedZxid()) + " client must try another server";
+            String msg = "Refusing session request for client " + cnxn.getRemoteSocketAddress() + " as it has seen zxid 0x" + Long.toHexString(connReq.getLastZxidSeen()) + " our"
+                    + " last zxid is 0x" + Long.toHexString(getZKDatabase().getDataTreeLastProcessedZxid()) + " client must try another server";
 
             LOG.info(msg);
             throw new CloseRequestException(msg);
@@ -1197,7 +1209,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         return rc;
     }
 
-    public Map<Long,Set<Long>> getSessionExpiryMap() {
+    public Map<Long, Set<Long>> getSessionExpiryMap() {
         return sessionTracker.getSessionExpiryMap();
     }
 

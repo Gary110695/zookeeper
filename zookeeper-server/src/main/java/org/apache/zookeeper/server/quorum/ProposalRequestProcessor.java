@@ -87,6 +87,7 @@ public class ProposalRequestProcessor implements RequestProcessor {
          * call processRequest on the next processor.
          */
         // 如果请求来自learner
+        // 什么时候发来的是LearnerSyncRequest？在 FollowerRequestProcessor#run -> case OpCode.sync
         if (request instanceof LearnerSyncRequest) {
             zks.getLeader().processSync((LearnerSyncRequest)request);
         } else {

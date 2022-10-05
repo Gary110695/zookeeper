@@ -272,6 +272,7 @@ public class LearnerHandler extends ZooKeeperThread {
                 if (LOG.isTraceEnabled()) {
                     ZooTrace.logQuorumPacket(LOG, traceMask, 'o', p);
                 }
+                // 如果follower挂了，该方法会抛出IOException，leader在这里可以感知到，关闭Socket，这个异步发送的线程就结束了
                 oa.writeRecord(p, "packet");
             } catch (IOException e) {
                 if (!sock.isClosed()) {
@@ -540,7 +541,6 @@ public class LearnerHandler extends ZooKeeperThread {
             // Mutation packets will be queued during the serialize,
             // so we need to mark when the peer can actually start
             // using the data
-            //
             LOG.debug("Sending UPTODATE message to " + sid);
             // 发送UPTODATE消息，但不会等待UPTODATE消息的ACK
             queuedPackets.add(new QuorumPacket(Leader.UPTODATE, -1, null, null));
@@ -548,6 +548,7 @@ public class LearnerHandler extends ZooKeeperThread {
             // 循环接收和处理learner发送的消息
             while (true) {
                 qp = new QuorumPacket();
+                // 如果follower挂了，该方法会抛出IOException，leader在这里可以感知到，关闭Socket，该LearnerHandler线程就结束了
                 ia.readRecord(qp, "packet");
 
                 long traceMask = ZooTrace.SERVER_PACKET_TRACE_MASK;
@@ -565,7 +566,6 @@ public class LearnerHandler extends ZooKeeperThread {
                 int cxid;
                 int type;
 
-                // 接收到客户端的响应
                 switch (qp.getType()) {
                     // ACK类型，说明follower已经完成该次请求事务日志的记录
                     case Leader.ACK:
@@ -787,7 +787,7 @@ public class LearnerHandler extends ZooKeeperThread {
                 // 找到 Follower 所需要的区间，先发送一个 DIFF 给 Follower，然后将一条条的写请求包装成 PROPOSAL 和 COMMIT 的顺序发给 Follower
                 LOG.info("Using committedLog for peer sid: " + getSid());
                 Iterator<Proposal> itr = db.getCommittedLog().iterator();
-                //差异化同步，发送(peerLaxtZxid, maxZxid]之间的消息给learner服务器
+                // 差异化同步，发送(peerLaxtZxid, maxZxid]之间的消息给learner服务器
                 currentZxid = queueCommittedProposals(itr, peerLastZxid, null, maxCommittedLog);
                 needSnap = false;
             } else if (peerLastZxid < minCommittedLog && txnLogSyncEnabled) {
@@ -906,9 +906,8 @@ public class LearnerHandler extends ZooKeeperThread {
                 continue;
             }
 
-            // Since this is already a committed proposal, we need to follow
-            // it by a commit packet
-            // 发送PROPOSAL消息，包含数据信
+            // Since this is already a committed proposal, we need to follow it by a commit packet
+            // 发送PROPOSAL消息
             queuePacket(propose.packet);
             // 发送COMMIT消息，仅包含需要提交的zxid信息
             queueOpPacket(Leader.COMMIT, packetZxid);

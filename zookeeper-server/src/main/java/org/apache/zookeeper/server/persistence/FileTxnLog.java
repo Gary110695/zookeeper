@@ -228,7 +228,7 @@ public class FileTxnLog implements TxnLog {
             FileHeader fhdr = new FileHeader(TXNLOG_MAGIC, VERSION, dbId);
             fhdr.serialize(oa, "fileheader");
             // Make sure that the magic number is written before padding.
-            // 强制刷新（保证数据存到磁盘），并获取当前写入数据的大小
+            // 刷新
             logStream.flush();
             // 设置当前写入数据的大小
             filePadding.setCurrentSize(fos.getChannel().position());
@@ -327,12 +327,11 @@ public class FileTxnLog implements TxnLog {
     }
 
     /**
-     * commit the logs. make sure that everything hits the
-     * disk
+     * commit the logs. make sure that everything hits the disk
      */
     public synchronized void commit() throws IOException {
-        // 若日志流logStream不为空，则强制刷新至磁盘
         if (logStream != null) {
+            // 调用包装的FileOutputStream的flush，只能保证数据写到了os cache，不能保证数据真正写入到磁盘上
             logStream.flush();
         }
         // 遍历需要刷新至磁盘的所有流streamsToFlush并进行刷新
@@ -343,6 +342,9 @@ public class FileTxnLog implements TxnLog {
                 long startSyncNS = System.nanoTime();
 
                 FileChannel channel = log.getChannel();
+                // FileChannel.force()方法将通道里尚未写入磁盘的数据强制写到磁盘上。出于性能方面的考虑，操作系统会将数据缓存在os cache中，
+                // 所以无法保证写入到FileChannel里的数据一定会即时写到磁盘上。要保证这一点，需要调用force()方法。
+                // force()方法有一个boolean类型的参数，指明是否同时将文件元数据（权限信息等）写到磁盘上。
                 channel.force(false);
 
                 // 计算流式的时间

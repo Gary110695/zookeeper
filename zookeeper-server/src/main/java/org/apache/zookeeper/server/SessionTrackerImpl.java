@@ -54,9 +54,10 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
 
     // 用于根据sessionID来管理会话的超时时间。该数据结构和ZooKeeper内存数据库相连通，会被定期持久化到快照文件中去。
     // 具体逻辑在SyncRequestProcessor#run中，zks.takeSnapshot -> FileTxnSnapLog.save
-    // 在启动时会加载sessionsWithTimeout，ZKDatabase#loadDataBase -> .FileTxnSnapLog#restore ->
+    // 在启动时会加载sessionsWithTimeout，ZKDatabase#loadDataBase -> FileTxnSnapLog#restore
     private final ConcurrentMap<Long, Integer> sessionsWithTimeout;
     private final AtomicLong nextSessionId = new AtomicLong();
+
     /**
      * 客户端通过实例化Zookeeper对象来创建于服务端的连接，创建连接成功后，服务端会创建一个Session（会话），
      * Session拥有唯一的SessionId，后续客户端就使用这个sessionId来标识当前会话
@@ -99,6 +100,7 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
      * 5 bytes are from timestamp, and low order 2 bytes are 0s.
      * <p>
      * 生成sessionId
+     * sessionId共64位，高8位是机器标识sid，中间40位时间戳毫秒值，低16位是0，可用于后续自增
      */
     public static long initializeNextSession(long id) {
         long nextSid;
@@ -162,7 +164,7 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
 
 
     /**
-     * SessionTrackerImpl是一个线程，会
+     * 当客户端在超时时间sessionTimeout还没有连接上，那么服务端会清理该会话，此时客户端哪怕连接上，也会被服务端认为是非法会话而中断。这时我们则只能手动新建一个Zookeeper客户端会话。
      */
     @Override
     public void run() {
@@ -181,7 +183,7 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
                     setSessionClosing(s.sessionId);
                     // 过期的会话桶中的会话依次构建并发起会话关闭请求  ZookeeperServer#expire  ZookeeperServer实现了SessionExpirer接口
                     // 为了使对该会话的关闭操作在整个服务端集群中都生效，ZooKeeper使用了发起会话关闭请求的方式，并立即交付给PrepRequestProcessor处理器进行处理
-                     expirer.expire(s);
+                    expirer.expire(s);
                 }
             }
         } catch (InterruptedException e) {

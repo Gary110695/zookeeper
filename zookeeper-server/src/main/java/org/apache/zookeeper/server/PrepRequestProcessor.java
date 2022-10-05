@@ -663,6 +663,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements Req
 
         checkACL(zks, parentRecord.acl, ZooDefs.Perms.CREATE, request.authInfo);
         int parentCVersion = parentRecord.stat.getCversion();
+        // 顺序节点
         if (createMode.isSequential()) {
             path = path + String.format(Locale.ENGLISH, "%010d", parentCVersion);
         }
@@ -679,6 +680,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements Req
         if (ephemeralParent) {
             throw new KeeperException.NoChildrenForEphemeralsException(path);
         }
+        // 更新父record的stat的cversion值
         int newCversion = parentRecord.stat.getCversion() + 1;
         // 生成事务请求体，后续requestProcessor会用到
         if (type == OpCode.createContainer) {
@@ -690,10 +692,15 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements Req
         }
         StatPersisted s = new StatPersisted();
         if (createMode.isEphemeral()) {
+            // 设置该临时节点是属于哪个会话的
             s.setEphemeralOwner(request.sessionId);
         }
-        // 将父节点的变更信息和当前节点的变更信息推送到ZooKeeperServer.outstandingChanges中
+        // 将父节点的变更信息和当前节点的变更信息推送到 ZooKeeperServer.outstandingChanges 队列中
+        // outstandingChanges 位于 ZooKeeperServer 中，用于存放刚进行更改还没有同步到 ZKDatabase 中的节点信息。
+        // znode节点会由于用户的读写操作频繁发生变化，为了提升数据的访问效率，ZooKeeper中有一个三层的数据缓冲层用于存放节点数据。
+        // outstandingChanges -> ZKDatabase -> FileSnap + FileTxnLog
         parentRecord = parentRecord.duplicate(request.getHdr().getZxid());
+        // 子节点个数加 1
         parentRecord.childCount++;
         parentRecord.stat.setCversion(newCversion);
         addChangeRecord(parentRecord);
@@ -744,6 +751,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements Req
                 case OpCode.create2:
                     // 请求体
                     CreateRequest create2Request = new CreateRequest();
+                    // 生成全局唯一的zxid（事务请求的id）
                     pRequest2Txn(request.type, zks.getNextZxid(), request, create2Request, true);
                     break;
                 case OpCode.createTTL:

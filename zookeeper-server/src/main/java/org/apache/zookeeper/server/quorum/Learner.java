@@ -42,9 +42,7 @@ import org.apache.jute.OutputArchive;
 import org.apache.jute.Record;
 import org.apache.zookeeper.ZooDefs.OpCode;
 import org.apache.zookeeper.common.X509Exception;
-import org.apache.zookeeper.server.Request;
-import org.apache.zookeeper.server.ServerCnxn;
-import org.apache.zookeeper.server.ZooTrace;
+import org.apache.zookeeper.server.*;
 import org.apache.zookeeper.server.quorum.QuorumPeer.QuorumServer;
 import org.apache.zookeeper.server.quorum.flexible.QuorumVerifier;
 import org.apache.zookeeper.server.util.SerializeUtils;
@@ -151,6 +149,8 @@ public class Learner {
      */
     void readPacket(QuorumPacket pp) throws IOException {
         synchronized (leaderIs) {
+            // 如果leader挂了，该方法会抛出IOException，follower就可以在这里感知到
+            // 此时在QuorunPeer#run -> case FOLLOWING 中会把状态设置为LOOKING
             leaderIs.readRecord(pp, "packet");
         }
         long traceMask = ZooTrace.SERVER_PACKET_TRACE_MASK;
@@ -316,6 +316,7 @@ public class Learner {
         ByteArrayOutputStream bsid = new ByteArrayOutputStream();
         BinaryOutputArchive boa = BinaryOutputArchive.getArchive(bsid);
         boa.writeRecord(li, "LearnerInfo");
+        // 将 LearnerInfo 序列化成字节数组，设置到 packet 的 data 中
         qp.setData(bsid.toByteArray());
 
         // follower发送FollowerInfo到leader
@@ -554,6 +555,8 @@ public class Learner {
         writePacket(ack, true);
         sock.setSoTimeout(self.tickTime * self.syncLimit);
         // 启动zookeeper
+        Thread.sleep(20000);
+        System.out.println("zk startup");
         zk.startup();
         /*
          * Update the election vote here to ensure that all members of the
@@ -632,6 +635,12 @@ public class Learner {
      */
     public void shutdown() {
         self.setZooKeeperServer(null);
+        // 关闭所有和客户端的连接
+        // 对于客户端而言，虽然可以连上follower，但是由于ZooKeeperServer此时不是RUNNING状态，所以会把socket给关闭掉
+        // java.io.IOException: ZooKeeperServer not running
+        // at org.apache.zookeeper.server.NIOServerCnxn.readLength(NIOServerCnxn.java:546)
+        // at org.apache.zookeeper.server.NIOServerCnxn.doIO(NIOServerCnxn.java:327)
+        // DEBUG [NIOWorkerThread-8:NIOServerCnxn@616] - Closed socket connection for client /127.0.0.1:9587 (no session established for client)
         self.closeAllConnections();
         self.adminServer.setZooKeeperServer(null);
         // shutdown previous zookeeper

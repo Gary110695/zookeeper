@@ -149,7 +149,6 @@ public class ClientCnxn {
      */
     private volatile int negotiatedSessionTimeout;
 
-    // 客户端认为的最大会话超时时间，默认为sessionTimeout * 2 / 3
     private int readTimeout;
 
     // 会话的超时时间
@@ -294,6 +293,7 @@ public class ClientCnxn {
 
         // create byte buffer
         // 将请求参数序列化
+        // 通过SocketChannel将数据发送到服务端，不是将整个Packet对象全部发送出去，而是将其中有效的请求头RequestHeader和请求体Request对象序列化好发送出去
         public void createBB() {
             try {
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -427,7 +427,7 @@ public class ClientCnxn {
 
     /**
      * EventThread用来处理Event的，这个Event主要是Watcher Event，就是我们在Zookeeper上注册的事件监听器，
-     * 如果被触发，则会接收到一个WatcherEvent事件，接收到之后，就是由EventThread来处理的
+     * 如果被触发，则会从服务端接收到一个WatcherEvent事件，接收到之后，就是由EventThread来处理的
      */
     class EventThread extends ZooKeeperThread {
         private final LinkedBlockingQueue<Object> waitingEvents = new LinkedBlockingQueue<Object>();
@@ -466,6 +466,8 @@ public class ClientCnxn {
             }
             WatcherSetEventPair pair = new WatcherSetEventPair(watchers, event);
             // queue the pair (watch set & event) for later processing
+            // 放入waitingEvents这个队列中
+            // EventThread线程是Zookeeper客户端中专门用来处理服务端通知事件的线程，EventThread中的WaitingEvents是一个待处理Watcher的队列，EventThread的run方法会不断对该队列进行处理
             waitingEvents.add(pair);
         }
 
@@ -644,6 +646,7 @@ public class ClientCnxn {
     protected void finishPacket(Packet p) {
         int err = p.replyHeader.getErr();
         if (p.watchRegistration != null) {
+            // 从ZKWatchManager 取出对应的 dataWatches、existWatches 或者 childWatches 其中的一个 Watcher 集合，然后将自己的 Watcher 添加到该 Watcher 集合中
             p.watchRegistration.register(err);
         }
         // Add all the removed watch events to the event queue, so that the
@@ -789,6 +792,7 @@ public class ClientCnxn {
             if (replyHdr.getXid() == -4) {
                 // -4 is the xid for AuthPacket               
                 if (replyHdr.getErr() == KeeperException.Code.AUTHFAILED.intValue()) {
+                    // 当服务端连接需要用户名密码时，那么客户端连接的创建需要将正确的用户名密码传入，如果错误的话，服务端会返回该异常
                     state = States.AUTH_FAILED;
                     eventThread.queueEvent(new WatchedEvent(Watcher.Event.EventType.None, Watcher.Event.KeeperState.AuthFailed, null));
                     eventThread.queueEventOfDeath();
@@ -798,7 +802,7 @@ public class ClientCnxn {
                 }
                 return;
             }
-            // 如果接收到的是一个事件，则将该时间放入到事件队列waitingEvent中（之后EventThread会去处理），return返回
+            // 如果接收到的是一个事件，则将该时间放入到事件队列waitingEvent中（之后EventThread会去处理），return返回  NioServerCnxn#process
             if (replyHdr.getXid() == -1) {
                 // -1 means notification
                 if (LOG.isDebugEnabled()) {
@@ -853,6 +857,7 @@ public class ClientCnxn {
             try {
                 // 校验服务器端响应中包含的XID值来确保请求处理的顺序性
                 // 如果请求的xid和相应的xid不匹配，说明顺序出了问题
+                // xid用来标识请求和响应的唯一性，Zookeeper服务端处理完请求后，还会将请求头中的xid写入到响应头中。这样请求便与响应对应起来了
                 if (packet.requestHeader.getXid() != replyHdr.getXid()) {
                     packet.replyHeader.setErr(KeeperException.Code.CONNECTIONLOSS.intValue());
                     throw new IOException("Xid out of order. Got Xid " + replyHdr.getXid() + " with err " + +replyHdr.getErr() + " expected Xid " + packet.requestHeader.getXid() + " for a packet with details: " + packet);
@@ -876,12 +881,14 @@ public class ClientCnxn {
                 }
             } finally {
                 // finishPacket方法会从packet中解析出注册的WatchRegistration对象并得到Watcher对象转交给ZKWatchManager，会根据类型保存到dataWatches或者existWatches或者childWatches中
+                // 并且会将 packet.finished 设置为 true，并且调用notifyAll将发送请求的线程唤醒，具体逻辑在 ClientCnxn#submitRequest 逻辑中
                 finishPacket(packet);
             }
         }
 
         SendThread(ClientCnxnSocket clientCnxnSocket) {
             super(makeThreadName("-SendThread()"));
+            // 当SendThread新建时会将 ClientCnxn 的连接状态设置为 CONNECTING
             state = States.CONNECTING;
             this.clientCnxnSocket = clientCnxnSocket;
             setDaemon(true);
@@ -908,7 +915,7 @@ public class ClientCnxn {
         /**
          * Setup session, previous watches, authentication.
          * 与服务器连接成功后就会调用该方法
-         *
+         * <p>
          * Zookeeper客户端创建完成之后，后续就可以使用其进行请求发送，在请求发送之前，
          * 会先检查客户端与服务端的连接是否存在（是否有对应Session），如果不存在，
          * 则会先创建Session会话，后续的操作都会依据当前Session来发送。
@@ -971,8 +978,8 @@ public class ClientCnxn {
             for (AuthData id : authInfo) {
                 outgoingQueue.addFirst(new Packet(new RequestHeader(-4, OpCode.auth), null, new AuthPacket(0, id.scheme, id.data), null, null));
             }
-            // 将该请求封装成Packet对象，放入到outgoingQueue队列的队头
-            // 在SendThread.run -> doTransport -> doIO -> sockKey.isReadable() -> readConnectResult 读取该请求对应的响应
+            // 将该请求封装成Packet对象，放入到outgoingQueue队列的队头，由于该packet的requestHeader为null，因此从outgoingQueue取出后，不会放入到pendingQueue中
+            // 在哪里处理响应的呢？在 SendThread.run -> doTransport -> doIO -> sockKey.isReadable() -> readConnectResult 读取该请求对应的响应
             outgoingQueue.addFirst(new Packet(null, null, conReq, null, null, readOnly));
 
             // 注册感兴趣事件为 读、写
@@ -1086,9 +1093,15 @@ public class ClientCnxn {
             long lastPingRwServer = Time.currentElapsedTime();
             final int MAX_SEND_PING_INTERVAL = 10000;   // 10 seconds
             InetSocketAddress serverAddress = null;
+            // 判断条件是 this != CLOSED && this != AUTH_FAILED
+            // 当客户端状态非CLOSED和AUTH_FAILED时，属于正常状态
             while (state.isAlive()) {
+                // 在使用Zookeeper客户端连接服务端时，若服务端发生异常，导致连接中断时，则客户端会不断发起重连，不断的重试Zookeeper集群中的其他机器
                 try {
                     // 如果未创建连接，则需要先创建一个对服务端的长连接
+                    // 判断条件是 sockKey != null
+                    // 这个sockKey就是SocketChannel注册 Selector 连接事件所返回的SelectorKey
+                    // 在下面的doTransport方法向服务端发送请求包，如果服务端异常，则会抛出一个Exception，在catch代码块中会将该 sockKey 置为 null，此时会进入if代码块中进行重连
                     if (!clientCnxnSocket.isConnected()) {
                         // don't re-establish connection if we are closing
                         if (closing) {
@@ -1161,6 +1174,7 @@ public class ClientCnxn {
                         int timeToNextPing = readTimeout / 2 - clientCnxnSocket.getIdleSend() - ((clientCnxnSocket.getIdleSend() > 1000) ? 1000 : 0);
                         // send a ping request either time is due or no packet sent out within MAX_SEND_PING_INTERVAL
                         if (timeToNextPing <= 0 || clientCnxnSocket.getIdleSend() > MAX_SEND_PING_INTERVAL) {
+                            // 为了保持会话的有效性，客户端每隔一段时间会向服务端发送PING请求来保持会话的有效性（心跳检测）
                             sendPing();
                             clientCnxnSocket.updateLastSend();
                         } else {
@@ -1184,6 +1198,7 @@ public class ClientCnxn {
                     }
 
                     // 通过clientCnxnSocket.doTransport从outgoingQueue队列中取出队列头部的Packet进行发送，并根据情况将该Packet放入到pendingQueue队列中
+                    // 如果发送请求包时，服务端异常，则会抛出一个Exception，被以下Catch获取到
                     clientCnxnSocket.doTransport(to, pendingQueue, ClientCnxn.this);
                 } catch (Throwable e) {
                     if (closing) {
@@ -1209,6 +1224,7 @@ public class ClientCnxn {
                         }
                         // At this point, there might still be new packets appended to outgoingQueue.
                         // they will be handled in next connection or cleared up if closed.
+                        // 在这里会将 sockKey 置为 null
                         cleanAndNotifyState();
                     }
                 }
@@ -1287,6 +1303,7 @@ public class ClientCnxn {
             clientCnxnSocket.cleanup();
             synchronized (pendingQueue) {
                 for (Packet p : pendingQueue) {
+                    // 对于未发送出去的包直接返回Connection相关异常信息，让客户端处理该异常
                     conLossPacket(p);
                 }
                 pendingQueue.clear();
@@ -1314,6 +1331,7 @@ public class ClientCnxn {
          */
         void onConnected(int _negotiatedSessionTimeout, long _sessionId, byte[] _sessionPasswd, boolean isRO) throws IOException {
             negotiatedSessionTimeout = _negotiatedSessionTimeout;
+            // 如果协商出的超时时间 <= 0，那么直接关闭当前连接
             if (negotiatedSessionTimeout <= 0) {
                 state = States.CLOSED;
 
@@ -1426,7 +1444,7 @@ public class ClientCnxn {
     protected int xid = 1;
 
     // @VisibleForTesting
-    // 客户端面向与服务端的连接状态
+    // 客户端面向与服务端的连接状态，默认是未连接状态
     volatile States state = States.NOT_CONNECTED;
 
     /*
@@ -1450,6 +1468,7 @@ public class ClientCnxn {
     public ReplyHeader submitRequest(RequestHeader h, Record request, Record response, WatchRegistration watchRegistration, WatchDeregistration watchDeregistration) throws InterruptedException {
         ReplyHeader r = new ReplyHeader();
         // 直接交由queuePacket()处理
+        // 这里将request和response都封装到Packet对象里
         Packet packet = queuePacket(h, r, request, response, null, null, null, null, watchRegistration, watchDeregistration);
         synchronized (packet) {
             if (requestTimeout > 0) {
@@ -1458,7 +1477,7 @@ public class ClientCnxn {
             } else {
                 // Wait for request completion infinitely
                 while (!packet.finished) {
-                    // 在sendThread.readResponse -> finishPacket 中，会调用 packet.notifyAll() 将当前线程唤醒
+                    // 在 sendThread.readResponse -> finishPacket 中，会调用 packet.notifyAll() 将当前线程唤醒
                     packet.wait();
                 }
             }
@@ -1542,7 +1561,7 @@ public class ClientCnxn {
                 outgoingQueue.add(packet);
             }
         }
-        // 唤醒ClientCnxnSocket
+        // 把SendThread中的Selector唤醒
         sendThread.getClientCnxnSocket().packetAdded();
         return packet;
     }

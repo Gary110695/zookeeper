@@ -1,9 +1,6 @@
 package org.apache.zookeeper.client;
 
-import org.apache.zookeeper.CreateMode;
-import org.apache.zookeeper.KeeperException;
-import org.apache.zookeeper.ZooDefs;
-import org.apache.zookeeper.ZooKeeper;
+import org.apache.zookeeper.*;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -11,14 +8,19 @@ import java.io.IOException;
 
 public class ZkClient {
 
-    private String connectString = "127.0.0.1:2181";
+    private String connectString = "127.0.0.1:2183";
     private int sessionTimeout = 300000000;
     ZooKeeper zkCli = null;
 
     // 初始化客户端
     @Before
     public void init() throws IOException {
-        zkCli = new ZooKeeper(connectString, sessionTimeout, null);
+        zkCli = new ZooKeeper(connectString, sessionTimeout, new Watcher() {
+            @Override
+            public void process(WatchedEvent event) {
+                System.out.println("watcher");
+            }
+        });
     }
 
     // 创建子节点

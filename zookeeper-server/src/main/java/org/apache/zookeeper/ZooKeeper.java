@@ -157,6 +157,7 @@ public class ZooKeeper implements AutoCloseable {
     @Deprecated
     public static final String SECURE_CLIENT = "zookeeper.client.secure";
 
+    // 核心
     protected final ClientCnxn cnxn;
     private static final Logger LOG;
 
@@ -260,9 +261,12 @@ public class ZooKeeper implements AutoCloseable {
      * API.
      */
     static class ZKWatchManager implements ClientWatchManager {
-        private final Map<String,Set<Watcher>> dataWatches = new HashMap<String,Set<Watcher>>();
-        private final Map<String,Set<Watcher>> existWatches = new HashMap<String,Set<Watcher>>();
-        private final Map<String,Set<Watcher>> childWatches = new HashMap<String,Set<Watcher>>();
+        // 数据变化的Watchers
+        private final Map<String, Set<Watcher>> dataWatches = new HashMap<String, Set<Watcher>>();
+        // 节点是否存在的Watcher
+        private final Map<String, Set<Watcher>> existWatches = new HashMap<String, Set<Watcher>>();
+        // 子节点变化的Watcher
+        private final Map<String, Set<Watcher>> childWatches = new HashMap<String, Set<Watcher>>();
         private boolean disableAutoWatchReset;
 
         ZKWatchManager(boolean disableAutoWatchReset) {
@@ -277,12 +281,12 @@ public class ZooKeeper implements AutoCloseable {
             }
         }
 
-        public Map<EventType,Set<Watcher>> removeWatcher(String clientPath, Watcher watcher, WatcherType watcherType, boolean local, int rc) throws KeeperException {
+        public Map<EventType, Set<Watcher>> removeWatcher(String clientPath, Watcher watcher, WatcherType watcherType, boolean local, int rc) throws KeeperException {
             // Validate the provided znode path contains the given watcher of
             // watcherType
             containsWatcher(clientPath, watcher, watcherType);
 
-            Map<EventType,Set<Watcher>> removedWatchers = new HashMap<EventType,Set<Watcher>>();
+            Map<EventType, Set<Watcher>> removedWatchers = new HashMap<EventType, Set<Watcher>>();
             HashSet<Watcher> childWatchersToRem = new HashSet<Watcher>();
             removedWatchers.put(EventType.ChildWatchRemoved, childWatchersToRem);
             HashSet<Watcher> dataWatchersToRem = new HashSet<Watcher>();
@@ -328,7 +332,7 @@ public class ZooKeeper implements AutoCloseable {
             return removedWatchers;
         }
 
-        private boolean contains(String path, Watcher watcherObj, Map<String,Set<Watcher>> pathVsWatchers) {
+        private boolean contains(String path, Watcher watcherObj, Map<String, Set<Watcher>> pathVsWatchers) {
             boolean watcherExists = true;
             if (pathVsWatchers == null || pathVsWatchers.size() == 0) {
                 watcherExists = false;
@@ -395,7 +399,7 @@ public class ZooKeeper implements AutoCloseable {
             }
         }
 
-        protected boolean removeWatches(Map<String,Set<Watcher>> pathVsWatcher, Watcher watcher, String path, boolean local, int rc, Set<Watcher> removedWatchers) throws KeeperException {
+        protected boolean removeWatches(Map<String, Set<Watcher>> pathVsWatcher, Watcher watcher, String path, boolean local, int rc, Set<Watcher> removedWatchers) throws KeeperException {
             if (!local && rc != Code.OK.intValue()) {
                 throw KeeperException.create(KeeperException.Code.get(rc), path);
             }
@@ -438,8 +442,11 @@ public class ZooKeeper implements AutoCloseable {
         public Set<Watcher> materialize(Watcher.Event.KeeperState state, Watcher.Event.EventType type, String clientPath) {
             Set<Watcher> result = new HashSet<Watcher>();
 
+            // 根据事件类型，从相应的 Watcher 存储（即 datawatches、existWatches 或 childwatches 中的一个或多个）中获取并移除对应的Watcher
+            // 这表明表明了客户端的Watcher同样也是一次性的，即一旦被触发后，该 Watcher就失效了
             switch (type) {
                 case None:
+                    // 添加默认Watcher
                     result.add(defaultWatcher);
                     boolean clear = disableAutoWatchReset && state != Watcher.Event.KeeperState.SyncConnected;
                     synchronized (dataWatches) {
@@ -522,7 +529,7 @@ public class ZooKeeper implements AutoCloseable {
             this.clientPath = clientPath;
         }
 
-        abstract protected Map<String,Set<Watcher>> getWatches(int rc);
+        abstract protected Map<String, Set<Watcher>> getWatches(int rc);
 
         /**
          * Register the watcher with the set of watches on path.
@@ -532,7 +539,7 @@ public class ZooKeeper implements AutoCloseable {
          */
         public void register(int rc) {
             if (shouldAddWatch(rc)) {
-                Map<String,Set<Watcher>> watches = getWatches(rc);
+                Map<String, Set<Watcher>> watches = getWatches(rc);
                 synchronized (watches) {
                     Set<Watcher> watchers = watches.get(clientPath);
                     if (watchers == null) {
@@ -566,7 +573,7 @@ public class ZooKeeper implements AutoCloseable {
         }
 
         @Override
-        protected Map<String,Set<Watcher>> getWatches(int rc) {
+        protected Map<String, Set<Watcher>> getWatches(int rc) {
             return rc == 0 ? watchManager.dataWatches : watchManager.existWatches;
         }
 
@@ -582,7 +589,7 @@ public class ZooKeeper implements AutoCloseable {
         }
 
         @Override
-        protected Map<String,Set<Watcher>> getWatches(int rc) {
+        protected Map<String, Set<Watcher>> getWatches(int rc) {
             return watchManager.dataWatches;
         }
     }
@@ -593,7 +600,7 @@ public class ZooKeeper implements AutoCloseable {
         }
 
         @Override
-        protected Map<String,Set<Watcher>> getWatches(int rc) {
+        protected Map<String, Set<Watcher>> getWatches(int rc) {
             return watchManager.childWatches;
         }
     }
@@ -602,6 +609,7 @@ public class ZooKeeper implements AutoCloseable {
     public enum States {
         CONNECTING, ASSOCIATING, CONNECTED, CONNECTEDREADONLY, CLOSED, AUTH_FAILED, NOT_CONNECTED;
 
+        // 当前连接是否存活
         public boolean isAlive() {
             return this != CLOSED && this != AUTH_FAILED;
         }
@@ -611,6 +619,7 @@ public class ZooKeeper implements AutoCloseable {
          * could possibly be read-only, if this client is allowed
          * to go to read-only mode)
          */
+        // 当前连接是否连接成功
         public boolean isConnected() {
             return this == CONNECTED || this == CONNECTEDREADONLY;
         }
@@ -653,6 +662,9 @@ public class ZooKeeper implements AutoCloseable {
      * @throws IOException              in cases of network failure
      * @throws IllegalArgumentException if an invalid chroot path is specified
      */
+    // 一般使用该构造方法
+    // 一旦客户端和服务端建立了长连接，就会建立一个会话
+    // 如果客户端跟服务端超过一定时间不通信，会话就会过期
     public ZooKeeper(String connectString, int sessionTimeout, Watcher watcher) throws IOException {
         this(connectString, sessionTimeout, watcher, false);
     }
@@ -819,6 +831,7 @@ public class ZooKeeper implements AutoCloseable {
         hostProvider = aHostProvider;
 
         // 创建 ClientCnxn 对象，并启动   关键！
+        // ClientCnxn 用来和服务端进行通信
         cnxn = createConnection(connectStringParser.getChrootPath(), hostProvider, sessionTimeout, this, watchManager, getClientCnxnSocket(), canBeReadOnly);
         cnxn.start();
     }
@@ -926,6 +939,8 @@ public class ZooKeeper implements AutoCloseable {
      * @throws IllegalArgumentException if an invalid chroot path is specified
      */
     public ZooKeeper(String connectString, int sessionTimeout, Watcher watcher, boolean canBeReadOnly, ZKClientConfig conf) throws IOException {
+        // 解析提供的服务器地址列表 connectString ，封装成一个 HostProvider 组件
+        // 每次客户端和服务端要建立连接，会通过该组件选择其中一个服务器来进行连接
         this(connectString, sessionTimeout, watcher, canBeReadOnly, createDefaultHostProvider(connectString), conf);
     }
 
@@ -1116,6 +1131,7 @@ public class ZooKeeper implements AutoCloseable {
 
         cnxn = new ClientCnxn(connectStringParser.getChrootPath(), hostProvider, sessionTimeout, this, watchManager, getClientCnxnSocket(), sessionId, sessionPasswd,
          canBeReadOnly);
+        // 设置客户端的seenRwServerBefore字段为true（因为用户提供了sessionId，这表明用户已经之前已经连接过服务端，所以能够获取到sessionId）
         cnxn.seenRwServerBefore = true; // since user has provided sessionId
         cnxn.start();
     }
@@ -1953,15 +1969,18 @@ public class ZooKeeper implements AutoCloseable {
         if (watcher != null) {
             wcb = new DataWatchRegistration(watcher, clientPath);
         }
-
+        // 1.拼装请求路径
         final String serverPath = prependChroot(clientPath);
 
+        // 2.拼装请求头
         RequestHeader h = new RequestHeader();
         h.setType(ZooDefs.OpCode.getData);
+        // 3.拼装请求体
         GetDataRequest request = new GetDataRequest();
         request.setPath(serverPath);
         request.setWatch(watcher != null);
         GetDataResponse response = new GetDataResponse();
+        // 4.在这里将请求发送出去
         ReplyHeader r = cnxn.submitRequest(h, request, response, wcb);
         if (r.getErr() != 0) {
             throw KeeperException.create(KeeperException.Code.get(r.getErr()), clientPath);
@@ -1995,7 +2014,7 @@ public class ZooKeeper implements AutoCloseable {
     }
 
     /**
-     * The asynchronous version of getData.
+     * The asynchronous version of getData.  异步获取
      *
      * @see #getData(String, Watcher, Stat)
      */
@@ -2009,10 +2028,13 @@ public class ZooKeeper implements AutoCloseable {
             wcb = new DataWatchRegistration(watcher, clientPath);
         }
 
+        // 1.拼装请求路径
         final String serverPath = prependChroot(clientPath);
 
+        // 2.拼装请求头
         RequestHeader h = new RequestHeader();
         h.setType(ZooDefs.OpCode.getData);
+        // 3.拼装请求体
         GetDataRequest request = new GetDataRequest();
         request.setPath(serverPath);
         request.setWatch(watcher != null);
@@ -2569,8 +2591,15 @@ public class ZooKeeper implements AutoCloseable {
     /**
      * Asynchronous sync. Flushes channel between process and leader.
      *
+     * ZooKeeper不是强一致性的。
+     * 举个例子，两个客户端A和B的场景，如果客户端A将znode / a的值从0设置为1，则告诉客户端B读取/ a，则客户端B可以读取旧值0，这取决于它连接到的服务器。
+     * 如果客户端A和客户端B读取相同的值对于开发人员很重要，则客户端B应该在执行读取之前调用sync()方法，异步的实现当前进程与leader之间的指定path的数据同步
+     *
+     * 使用案例可以看 SyncCallTest
+     *
      * @param path
      * @param cb   a handler for the callback
+     *             在 EventThread#processEvent 中，p.cb instanceof VoidCallback ，会调用它的processResult方法  何时加入到waitingEvents中的？在finishPacket方法中检测到packet.cb != null
      * @param ctx  context to be provided to the callback
      * @throws IllegalArgumentException if an invalid path is specified
      */
@@ -2818,7 +2847,7 @@ public class ZooKeeper implements AutoCloseable {
     }
 
     protected byte[] internalReconfig(List<String> joiningServers, List<String> leavingServers, List<String> newMembers, long fromConfig, Stat stat) throws KeeperException,
-     InterruptedException {
+            InterruptedException {
         return internalReconfig(StringUtils.joinStrings(joiningServers, ","), StringUtils.joinStrings(leavingServers, ","), StringUtils.joinStrings(newMembers, ","), fromConfig,
          stat);
     }

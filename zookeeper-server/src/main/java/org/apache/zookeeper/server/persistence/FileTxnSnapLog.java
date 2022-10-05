@@ -196,7 +196,7 @@ public class FileTxnSnapLog {
      * snapshots and transaction logs
      *
      * 在启动时先从本地文件中快速恢复数据，第一就是先把快照文件快速恢复，在后台有个线程会定期把内存中的数据序列化为一个快照文件，
-     * 所以恢复数据是很快的。第二日志文件，每写一条数据就会写入到日志文件中，所以在把快照文件中的数据恢复到内存中之后，再去事务
+     * 所以恢复数据是很快的。第二事务日志文件，每写一条数据就会写入到日志文件中，所以在把快照文件中的数据恢复到内存中之后，再去事务
      * 日志文件中找到快照文件生成之后但是还没来得及生成下次快照文件之前的数据，再恢复到内存中去，此时才算从文件中恢复数据完毕
      *
      * @param dt       the datatree to be restored
@@ -268,7 +268,7 @@ public class FileTxnSnapLog {
                     highestZxid = hdr.getZxid();
                 }
                 try {
-                    // 在datatree上处理事务
+                    // 在DataTree上处理事务
                     processTransaction(hdr, dt, sessions, itr.getTxn());
                 } catch (KeeperException.NoNodeException e) {
                     throw new IOException("Failed to process transaction type: " + hdr.getType() + " error: " + e.getMessage(), e);

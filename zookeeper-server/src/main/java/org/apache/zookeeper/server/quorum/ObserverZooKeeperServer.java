@@ -43,7 +43,6 @@ public class ObserverZooKeeperServer extends LearnerZooKeeperServer {
      * Enable since request processor for writing txnlog to disk and
      * take periodic snapshot. Default is ON.
      */
-
     private boolean syncRequestProcessorEnabled = this.self.getSyncEnabled();
 
     /*

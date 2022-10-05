@@ -35,6 +35,7 @@ public interface ClientWatchManager {
      * @param path event path
      * @return may be empty set but must not be null
      */
+    // 该方法表示事件发生时，返回需要被通知的Watcher集合，可能为空集合
     public Set<Watcher> materialize(Watcher.Event.KeeperState state,
         Watcher.Event.EventType type, String path);
 }

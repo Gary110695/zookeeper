@@ -100,7 +100,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                     initialized = true;
                 }
                 else {
-                    // 读取len长度的数据到ByteBuffer中，最终交由SendThread解析
+                    // 读取len长度的数据到ByteBuffer中，最终交由SendThread处理
                     sendThread.readResponse(incomingBuffer);
                     lenBuffer.clear();
                     incomingBuffer = lenBuffer;
@@ -108,8 +108,9 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                 }
             }
         }
-        // 有数据可写
+        // 可写
         if (sockKey.isWritable()) {
+            // 按照先来后到原则，获取第一个待发送的packet
             Packet p = findSendablePacket(outgoingQueue, sendThread.tunnelAuthInProgress());
 
             if (p != null) {
@@ -130,7 +131,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                 }
                 // 最终在这里通过SocketChannel将ByteBuffer发送给服务端
                 sock.write(p.bb);
-                // 发送完成之后，将packet添加到pendingQueue，等待响应
+                // 发送完成之后，将packet从outgoingQueue中移除，添加到pendingQueue，等待响应
                 if (!p.bb.hasRemaining()) {
                     sentCount.getAndIncrement();
                     outgoingQueue.removeFirstOccurrence(p);
@@ -141,6 +142,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                     }
                 }
             }
+            // 重新设置Selector的状态，如果outgoingQueue还有packet，则继续设置OP_WRITE状态
             if (outgoingQueue.isEmpty()) {
                 // No more packets to send: turn off write interest flag.
                 // Will be turned on later by a later call to enableWrite(),
@@ -198,6 +200,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
 
     @Override
     void cleanup() {
+        // 关闭socket流
         if (sockKey != null) {
             SocketChannel sock = (SocketChannel)sockKey.channel();
             sockKey.cancel();
@@ -237,6 +240,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                 LOG.debug("SendThread interrupted during sleep, ignoring");
             }
         }
+        // 将sockKey设置为null
         sockKey = null;
     }
 
@@ -281,7 +285,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
         sockKey = sock.register(selector, SelectionKey.OP_CONNECT);
         boolean immediateConnect = sock.connect(addr);
         if (immediateConnect) {
-            // 连接成功后，就会调用 primeConnection 方法
+            // 连接成功后，就会调用 primeConnection 方法建立会话
             sendThread.primeConnection();
         }
     }

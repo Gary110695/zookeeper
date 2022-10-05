@@ -115,8 +115,7 @@ public class FinalRequestProcessor implements RequestProcessor {
             // 注册到了SessionTracker中，因此此处无需对内存数据库做任何处理，只需要再次向SessionTracker进行会话注册即可
             rc = zks.processTxn(request);
 
-            // request.hdr is set for write requests, which are the only ones
-            // that add to outstandingChanges.
+            // request.hdr is set for write requests, which are the only ones that add to outstandingChanges.
             if (request.getHdr() != null) {
                 TxnHeader hdr = request.getHdr();
                 Record txn = request.getTxn();
@@ -331,6 +330,9 @@ public class FinalRequestProcessor implements RequestProcessor {
                     PrepRequestProcessor.checkACL(zks, zks.getZKDatabase().aclForNode(n), ZooDefs.Perms.READ, request.authInfo);
                     Stat stat = new Stat();
                     // 获取节点内容信息
+                    // 会判断收到的请求是否带有 Watch 注册事件，如果有，就将将对应的 Watch 事件存储到服务端的 WatchManager 中
+                    // WatchManager是ZooKeeper服务端 Watcher 的管理者，其内部管理的watchTable 和 watch2Paths 两个存储结构，分别从两个维度对Watcher进行存储。同时WatchManager还负责Watcher事件的触发，并移除那些已经被触发的Watcher
+                    // 在服务端，DataTree中会托管两个WatchManager，分别是dataWatches和childWatches，分别对应数据变更Watcher和子节点变更Watcher。对于getData，最终会被存储在dataMatches中
                     byte b[] = zks.getZKDatabase().getData(getDataRequest.getPath(), stat, getDataRequest.getWatch() ? cnxn : null);
                     // 将节点内容信息和stat信息封装到GetDataResponse返回
                     rsp = new GetDataResponse(b, stat);

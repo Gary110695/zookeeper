@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -30,6 +30,7 @@ import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.Watcher.Event.EventType;
 import org.apache.zookeeper.Watcher.Event.KeeperState;
+import org.apache.zookeeper.ZooKeeper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,15 +41,15 @@ import org.slf4j.LoggerFactory;
 class WatchManager {
     private static final Logger LOG = LoggerFactory.getLogger(WatchManager.class);
 
-    private final HashMap<String, HashSet<Watcher>> watchTable =
-        new HashMap<String, HashSet<Watcher>>();
+    // 从节点路径到watcher集合的映射
+    private final HashMap<String, HashSet<Watcher>> watchTable = new HashMap<String, HashSet<Watcher>>();
 
-    private final HashMap<Watcher, HashSet<String>> watch2Paths =
-        new HashMap<Watcher, HashSet<String>>();
+    // 从watcher到所有节点路径集合的映射
+    private final HashMap<Watcher, HashSet<String>> watch2Paths = new HashMap<Watcher, HashSet<String>>();
 
-    synchronized int size(){
+    synchronized int size() {
         int result = 0;
-        for(Set<Watcher> watches : watchTable.values()) {
+        for (Set<Watcher> watches : watchTable.values()) {
             result += watches.size();
         }
         return result;
@@ -95,16 +96,17 @@ class WatchManager {
     }
 
     Set<Watcher> triggerWatch(String path, EventType type, Set<Watcher> supress) {
-        WatchedEvent e = new WatchedEvent(type,
-                KeeperState.SyncConnected, path);
+        WatchedEvent e = new WatchedEvent(type, KeeperState.SyncConnected, path);
         HashSet<Watcher> watchers;
+        // 根据数据节点的节点路径从watchTable中取出对应的Watcher。如果没有找到Watcher，
+        // 说明没有任何客户端在该数据节点上注册过Watcher，直接退出。而如果找到了这个
+        // Watcher，会将其取出来，同时会直接从watchTable 和watch2Paths中将其删除。
+        // 从这里我们可以看出，Watcher在服务端是一次性的，即触发一次就失效了
         synchronized (this) {
             watchers = watchTable.remove(path);
             if (watchers == null || watchers.isEmpty()) {
                 if (LOG.isTraceEnabled()) {
-                    ZooTrace.logTraceMessage(LOG,
-                            ZooTrace.EVENT_DELIVERY_TRACE_MASK,
-                            "No watchers for " + path);
+                    ZooTrace.logTraceMessage(LOG, ZooTrace.EVENT_DELIVERY_TRACE_MASK, "No watchers for " + path);
                 }
                 return null;
             }
@@ -115,6 +117,8 @@ class WatchManager {
                 }
             }
         }
+        // 依次地调用上面找出的所有Watcher的process()方法
+        // 对于客户端注册Watcher的请求，如Zookeeper#getData、getChildren、exist，ZooKeeper 会把当前请求对应的 ServerCnxn 作为一个 Watcher 进行存储，因此，这里调用的是 ServerCnxn#process
         for (Watcher w : watchers) {
             if (supress != null && supress.contains(w)) {
                 continue;
@@ -131,8 +135,7 @@ class WatchManager {
     public synchronized String toString() {
         StringBuilder sb = new StringBuilder();
 
-        sb.append(watch2Paths.size()).append(" connections watching ")
-            .append(watchTable.size()).append(" paths\n");
+        sb.append(watch2Paths.size()).append(" connections watching ").append(watchTable.size()).append(" paths\n");
 
         int total = 0;
         for (HashSet<String> paths : watch2Paths.values()) {
@@ -145,8 +148,9 @@ class WatchManager {
 
     /**
      * String representation of watches. Warning, may be large!
+     *
      * @param byPath iff true output watches by paths, otw output
-     * watches by connection
+     *               watches by connection
      * @return string representation of watches
      */
     synchronized void dumpWatches(PrintWriter pwriter, boolean byPath) {
@@ -174,10 +178,8 @@ class WatchManager {
     /**
      * Checks the specified watcher exists for the given path
      *
-     * @param path
-     *            znode path
-     * @param watcher
-     *            watcher object reference
+     * @param path    znode path
+     * @param watcher watcher object reference
      * @return true if the watcher exists, false otherwise
      */
     synchronized boolean containsWatcher(String path, Watcher watcher) {
@@ -191,10 +193,8 @@ class WatchManager {
     /**
      * Removes the specified watcher for the given path
      *
-     * @param path
-     *            znode path
-     * @param watcher
-     *            watcher object reference
+     * @param path    znode path
+     * @param watcher watcher object reference
      * @return true if the watcher successfully removed, false otherwise
      */
     synchronized boolean removeWatcher(String path, Watcher watcher) {
@@ -223,8 +223,8 @@ class WatchManager {
      */
     synchronized WatchesReport getWatches() {
         Map<Long, Set<String>> id2paths = new HashMap<Long, Set<String>>();
-        for (Entry<Watcher, HashSet<String>> e: watch2Paths.entrySet()) {
-            Long id = ((ServerCnxn) e.getKey()).getSessionId();
+        for (Entry<Watcher, HashSet<String>> e : watch2Paths.entrySet()) {
+            Long id = ((ServerCnxn)e.getKey()).getSessionId();
             HashSet<String> paths = new HashSet<String>(e.getValue());
             id2paths.put(id, paths);
         }
@@ -243,7 +243,7 @@ class WatchManager {
             Set<Long> ids = new HashSet<Long>(e.getValue().size());
             path2ids.put(e.getKey(), ids);
             for (Watcher watcher : e.getValue()) {
-                ids.add(((ServerCnxn) watcher).getSessionId());
+                ids.add(((ServerCnxn)watcher).getSessionId());
             }
         }
         return new WatchesPathReport(path2ids);
@@ -260,7 +260,6 @@ class WatchManager {
         for (HashSet<String> paths : watch2Paths.values()) {
             totalWatches += paths.size();
         }
-        return new WatchesSummary (watch2Paths.size(), watchTable.size(),
-                                   totalWatches);
+        return new WatchesSummary(watch2Paths.size(), watchTable.size(), totalWatches);
     }
 }

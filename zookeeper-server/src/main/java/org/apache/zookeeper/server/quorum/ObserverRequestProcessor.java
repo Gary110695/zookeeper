@@ -33,8 +33,7 @@ import org.apache.zookeeper.server.ZooTrace;
 import org.apache.zookeeper.txn.ErrorTxn;
 
 /**
- * This RequestProcessor forwards any requests that modify the state of the
- * system to the Leader.
+ * This RequestProcessor forwards any requests that modify the state of the system to the Leader.
  */
 public class ObserverRequestProcessor extends ZooKeeperCriticalThread implements
         RequestProcessor {

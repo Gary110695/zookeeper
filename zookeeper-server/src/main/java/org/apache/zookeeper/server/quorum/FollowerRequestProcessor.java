@@ -78,6 +78,8 @@ public class FollowerRequestProcessor extends ZooKeeperCriticalThread implements
                 // add it to pendingSyncs.
                 switch (request.type) {
                     case OpCode.sync:
+                        // sync请求和其它事务型请求的的区别在于，除了发送给leader之外，还要记录到pendingSyncs里
+                        // 直到收到leader的Leader.SYNC消息时，才将这个请求从pendingSyncs队列里移除，并commit这个请求
                         zks.pendingSyncs.add(request);
                         zks.getFollower().request(request);
                         break;

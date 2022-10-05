@@ -770,7 +770,7 @@ public class Leader {
         // in order to be committed, a proposal must be accepted by a quorum.
         //
         // getting a quorum from all necessary configurations.
-        // 是否已经有过半的follower返回ac
+        // 是否已经有过半的ACK
         if (!p.hasAllQuorums()) {
             return false;
         }
@@ -1118,13 +1118,28 @@ public class Leader {
     /**
      * Process sync requests
      *
+     * 当Leader收到一个sync请求时，如果leader当前没有待commit的决议，那么leader会立即发送一个Leader.SYNC消息给follower。
+     * 否则，leader会等到当前最后一个待commit的决议完成后，再发送Leader.SYNC消息给follower。
+     *
+     * 为什么要这么做？看Zookeeper客户端提供的sync()这个API就懂了
+     *
+     * leader和follower之间的消息通信，是严格按顺序来发送的（TCP保证），因此，当follower接收到Leader.SYNC消息时，
+     * 说明follower也一定接收到了leader之前（在leader接收到sync请求之前）发送的所有提案的commit消息。这样，
+     * 就可以确保follower和leader是同步的了
+     *
      * @param r the request
      */
-
     synchronized public void processSync(LearnerSyncRequest r) {
+        // 在 Leader.propose 中会将待commit的决议加入到 outstandingProposals 中
         if (outstandingProposals.isEmpty()) {
+            // 发送一个Leader.SYNC消息给follower
+            // 在 Follower#processPacket 中，case Leader.SYNC，会调用 FollowerZooKeeperServer#sync ，commit 该sync请求，交由FinalRequestProcessor处理该请求 OpCode.sync
             sendSync(r);
         } else {
+            // lastProposed 表示 截止当前，最后一个待commit的决议的zxid
+            // 建立 最后一个待commit的决议的zxid -> 该同步数据请求 的映射关系
+            // 在 Leader#tryToCommit 方法的最后，由于最后一个待commit的决议已经commit了，就会从该映射关系中
+            // 取出相应的同步数据请求，调用sendSync发送给follower
             List<LearnerSyncRequest> l = pendingSyncs.get(lastProposed);
             if (l == null) {
                 l = new ArrayList<LearnerSyncRequest>();

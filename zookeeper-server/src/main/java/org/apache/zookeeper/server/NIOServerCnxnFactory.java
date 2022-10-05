@@ -178,6 +178,8 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
      * them across the SelectorThreads. It enforces maximum number of
      * connections per IP and attempts to cope with running out of file
      * descriptors by briefly sleeping before retrying.
+     *
+     * 该线程接收来自客户端的连接，并将其分配给一个selector thread
      */
     private class AcceptThread extends AbstractSelectThread {
         private final ServerSocketChannel acceptSocket;
@@ -278,6 +280,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
             boolean accepted = false;
             SocketChannel sc = null;
             try {
+                // 接收客户端连接
                 sc = acceptSocket.accept();
                 accepted = true;
                 InetAddress ia = sc.socket().getInetAddress();
@@ -288,9 +291,11 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
                 }
 
                 LOG.debug("Accepted socket connection from " + sc.socket().getRemoteSocketAddress());
+                // 设置为非阻塞模式
                 sc.configureBlocking(false);
 
                 // Round-robin assign this connection to a selector thread
+                // 轮询获取一个SelectorThread，将当前连接分配给该SelectorThread
                 if (!selectorIterator.hasNext()) {
                     selectorIterator = selectorThreads.iterator();
                 }
@@ -350,6 +355,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
             if (stopped || !acceptedQueue.offer(accepted)) {
                 return false;
             }
+            // 唤醒该SelectorThread的selector
             wakeupSelector();
             return true;
         }
@@ -378,8 +384,11 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
             try {
                 while (!stopped) {
                     try {
+                        // 通过 selector.select() 获取就绪的IO事件，交由 worker thread 处理，在 ZookeeperServer#processPacket 中处理数据
                         select();
+                        // 把 acceptedQueue 队列中接收到的客户端连接取出，注册OP_READ事件，并封装为 NIOServerCnxn
                         processAcceptedConnections();
+                        // 更新 updateQueue 队列中 SelectionKey 监听的事件
                         processInterestOpsUpdateRequests();
                     } catch (RuntimeException e) {
                         LOG.warn("Ignoring unexpected runtime exception", e);
@@ -417,6 +426,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
 
                 Set<SelectionKey> selected = selector.selectedKeys();
                 ArrayList<SelectionKey> selectedList = new ArrayList<SelectionKey>(selected);
+                // 随机处理不同的客户端的请求，避免有一定的偏向性
                 Collections.shuffle(selectedList);
                 Iterator<SelectionKey> selectedKeys = selectedList.iterator();
                 while (!stopped && selectedKeys.hasNext()) {
@@ -428,6 +438,8 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
                         continue;
                     }
                     if (key.isReadable() || key.isWritable()) {
+                        // 核心方法
+                        // 处理客户端的请求
                         handleIO(key);
                     } else {
                         LOG.warn("Unexpected ops in select " + key.readyOps());
@@ -444,6 +456,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
          * I/O is run directly by this thread.
          */
         private void handleIO(SelectionKey key) {
+            // 封装当前SelectorThread为IOWorkRequest,并将IOWorkRequest交给workerPool来调度
             IOWorkRequest workRequest = new IOWorkRequest(this, key);
             NIOServerCnxn cnxn = (NIOServerCnxn)key.attachment();
 
@@ -516,6 +529,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
             }
 
             if (key.isReadable() || key.isWritable()) {
+                // 处理IO数据
                 cnxn.doIO(key);
 
                 // Check if we shutdown or doIO() closed this connection
@@ -660,6 +674,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
         this.ss = ServerSocketChannel.open();
         ss.socket().setReuseAddress(true);
         LOG.info("binding to port " + addr);
+        // 绑定2181端口
         ss.socket().bind(addr);
         ss.configureBlocking(false);
         acceptThread = new AcceptThread(ss, addr, selectorThreads);
